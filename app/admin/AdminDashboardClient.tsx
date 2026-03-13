@@ -3,7 +3,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-// FIX: Sumamos createAdminMarket a las importaciones
 import { getProfile, getAdminMarkets, approveMarket, rejectMarket, resolveMarket, updateMarket, deleteMarket, createAdminMarket } from "@/lib/actions";
 import type { ProfileResult } from "@/lib/actions";
 import { createClient } from "@/lib/supabase/client";
@@ -36,8 +35,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-// FIX: Sumamos el ícono Plus
-import { Loader2, CheckCircle2, XCircle, Flag, ArrowLeft, Pencil, Calendar, AlertTriangle, Trash2, Plus } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, Flag, ArrowLeft, Pencil, Calendar, AlertTriangle, Trash2, Plus, Image as ImageIcon } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
 interface Market {
@@ -52,6 +50,7 @@ interface Market {
   created_at: string;
   created_by: string;
   total_volume: number;
+  image_url?: string | null; // <--- NUEVO
   winning_outcome?: string | null;
   [key: string]: unknown;
 }
@@ -65,16 +64,15 @@ export default function AdminDashboardClient() {
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
   const [profile, setProfile] = useState<ProfileResult>(null);
   const [isDarkMode, setIsDarkMode] = useState(true);
+  
   const [editingMarket, setEditingMarket] = useState<Market | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [editForm, setEditForm] = useState({ title: "", description: "", category: "", end_date: "" });
+  const [editForm, setEditForm] = useState({ title: "", description: "", category: "", end_date: "", image_url: "" });
   
-  // NUEVO: Estados para la creación rápida del Admin
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
-  const [createForm, setCreateForm] = useState({ title: "", description: "", category: "politica", end_date: "" });
+  const [createForm, setCreateForm] = useState({ title: "", description: "", category: "politica", end_date: "", image_url: "" });
 
-  // Estados para las confirmaciones peligrosas
   const [resolvingMarket, setResolvingMarket] = useState<{ id: string, outcome: 'yes' | 'no', title: string } | null>(null);
   const [deletingMarket, setDeletingMarket] = useState<{ id: string, title: string } | null>(null);
 
@@ -106,22 +104,11 @@ export default function AdminDashboardClient() {
   useEffect(() => {
     if (!isCheckingAuth) {
       fetchMarkets();
-
-      // MÁGIA: TIEMPO REAL
       const channel = supabase
         .channel("admin-markets")
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "markets" },
-          () => {
-            fetchMarkets();
-          }
-        )
+        .on("postgres_changes", { event: "*", schema: "public", table: "markets" }, () => { fetchMarkets(); })
         .subscribe();
-
-      return () => {
-        supabase.removeChannel(channel);
-      };
+      return () => { supabase.removeChannel(channel); };
     }
   }, [isCheckingAuth, supabase]);
 
@@ -135,6 +122,7 @@ export default function AdminDashboardClient() {
         description: String(editingMarket.description ?? ""),
         category: categoryNormalized || "politica",
         end_date: endDate,
+        image_url: String(editingMarket.image_url ?? ""), // <--- NUEVO
       });
     }
   }, [editingMarket]);
@@ -148,6 +136,7 @@ export default function AdminDashboardClient() {
       description: editForm.description.trim() || null,
       category: editForm.category,
       end_date: editForm.end_date,
+      image_url: editForm.image_url.trim() || null, // <--- NUEVO
     });
     setIsSaving(false);
     
@@ -160,7 +149,6 @@ export default function AdminDashboardClient() {
     }
   };
 
-  // NUEVO: Función para que el Admin cree mercados instantáneos
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsCreating(true);
@@ -169,6 +157,7 @@ export default function AdminDashboardClient() {
       description: createForm.description.trim() || null,
       category: createForm.category,
       end_date: createForm.end_date,
+      image_url: createForm.image_url.trim() || null, // <--- NUEVO
     });
     setIsCreating(false);
 
@@ -177,7 +166,7 @@ export default function AdminDashboardClient() {
     } else {
       toast({ title: "Mercado Activo", description: "El mercado se creó y ya está público." });
       setIsCreateModalOpen(false);
-      setCreateForm({ title: "", description: "", category: "politica", end_date: "" }); // Reset
+      setCreateForm({ title: "", description: "", category: "politica", end_date: "", image_url: "" }); // Reset
       await fetchMarkets();
     }
   };
@@ -185,25 +174,16 @@ export default function AdminDashboardClient() {
   const handleApprove = async (marketId: string) => {
     setProcessingIds((p) => new Set(p).add(marketId));
     const { error } = await approveMarket(marketId);
-    
-    if (error) {
-      toast({ title: "Error", description: error, variant: "destructive" });
-    } else {
-      toast({ title: "Aprobado", description: "El mercado ya está público y el creador fue recompensado." });
-      await fetchMarkets();
-    }
+    if (error) toast({ title: "Error", description: error, variant: "destructive" });
+    else { toast({ title: "Aprobado", description: "El mercado ya está público." }); await fetchMarkets(); }
     setProcessingIds((p) => { const n = new Set(p); n.delete(marketId); return n; });
   };
 
   const handleReject = async (marketId: string) => {
     setProcessingIds((p) => new Set(p).add(marketId));
     const { error } = await rejectMarket(marketId);
-    
-    if (error) {
-      toast({ title: "Error", description: error, variant: "destructive" });
-    } else {
-      await fetchMarkets();
-    }
+    if (error) toast({ title: "Error", description: error, variant: "destructive" });
+    else await fetchMarkets();
     setProcessingIds((p) => { const n = new Set(p); n.delete(marketId); return n; });
   };
 
@@ -212,15 +192,9 @@ export default function AdminDashboardClient() {
     const { id, outcome } = resolvingMarket;
     setProcessingIds((p) => new Set(p).add(id));
     setResolvingMarket(null);
-    
     const { error } = await resolveMarket(id, outcome);
-    
-    if (error) {
-      toast({ title: "Error al resolver", description: error, variant: "destructive" });
-    } else {
-      toast({ title: "Mercado Finalizado", description: `Se repartieron los puntos a los ganadores.` });
-      await fetchMarkets();
-    }
+    if (error) toast({ title: "Error al resolver", description: error, variant: "destructive" });
+    else { toast({ title: "Mercado Finalizado", description: `Se repartieron los puntos.` }); await fetchMarkets(); }
     setProcessingIds((p) => { const n = new Set(p); n.delete(id); return n; });
   };
 
@@ -229,15 +203,9 @@ export default function AdminDashboardClient() {
     const { id } = deletingMarket;
     setProcessingIds((p) => new Set(p).add(id));
     setDeletingMarket(null);
-    
     const { error } = await deleteMarket(id);
-    
-    if (error) {
-      toast({ title: "Error al eliminar", description: error, variant: "destructive" });
-    } else {
-      toast({ title: "Mercado Eliminado", description: "Se borró el mercado y se reembolsaron los puntos." });
-      await fetchMarkets();
-    }
+    if (error) toast({ title: "Error al eliminar", description: error, variant: "destructive" });
+    else { toast({ title: "Mercado Eliminado", description: "Se reembolsaron los puntos." }); await fetchMarkets(); }
     setProcessingIds((p) => { const n = new Set(p); n.delete(id); return n; });
   };
 
@@ -292,11 +260,10 @@ export default function AdminDashboardClient() {
       <div className="container mx-auto px-4 py-8">
         <div className="mb-6"><Button variant="ghost" size="sm" asChild><Link href="/"><ArrowLeft className="w-4 h-4 mr-2" />Volver</Link></Button></div>
         
-        {/* FIX: Modificamos el Header para agregar el botón de crear */}
         <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold mb-2">Panel de <span className="text-primary">Administración</span></h1>
-            <p className="text-muted-foreground text-lg">Aprobá propuestas y resolvé mercados en vivo.</p>
+            <p className="text-muted-foreground text-lg">Aprobá propuestas, editá fotos y resolvé mercados en vivo.</p>
           </div>
           <Button onClick={() => setIsCreateModalOpen(true)} className="shrink-0 bg-primary hover:bg-primary/90">
             <Plus className="w-4 h-4 mr-2" />
@@ -326,7 +293,17 @@ export default function AdminDashboardClient() {
                   sortedMarkets.map((market) => (
                     <TableRow key={String(market.id)} className={market.status === 'resolved' ? 'opacity-70 bg-muted/10' : ''}>
                       <TableCell>
-                        <p className="font-medium text-foreground">{safeString(market.title)}</p>
+                        <div className="flex items-center gap-3">
+                          {/* Miniatura de la foto si la tiene */}
+                          {market.image_url ? (
+                            <img src={String(market.image_url)} alt="Miniatura" className="w-10 h-10 rounded-md object-cover border border-border/50 shrink-0" />
+                          ) : (
+                            <div className="w-10 h-10 rounded-md bg-muted/50 border border-border/50 flex items-center justify-center shrink-0">
+                              <ImageIcon className="w-4 h-4 text-muted-foreground/50" />
+                            </div>
+                          )}
+                          <p className="font-medium text-foreground line-clamp-2">{safeString(market.title)}</p>
+                        </div>
                       </TableCell>
                       <TableCell><Badge variant="secondary" className="font-normal capitalize">{safeString(market.category)}</Badge></TableCell>
                       <TableCell>{getStatusBadge(market.status)}</TableCell>
@@ -338,7 +315,6 @@ export default function AdminDashboardClient() {
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2 flex-wrap">
                           
-                          {/* El botón de Editar aparece para TODOS */}
                           <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => setEditingMarket(market)}>
                             <Pencil className="w-4 h-4" />
                           </Button>
@@ -365,7 +341,6 @@ export default function AdminDashboardClient() {
                             </>
                           )}
 
-                          {/* Botón de Borrar (Tachito Rojo) para Activos, Rechazados y Finalizados */}
                           {market.status !== "pending" && (
                             <Button size="icon" variant="destructive" className="h-8 w-8" onClick={() => setDeletingMarket({ id: market.id, title: String(market.title) })} disabled={processingIds.has(market.id)}>
                               {processingIds.has(market.id) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
@@ -382,13 +357,13 @@ export default function AdminDashboardClient() {
           </div>
         )}
 
-        {/* Modal de Creación Rápida (Exclusivo Admin) */}
+        {/* Modal de Creación Rápida */}
         <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Crear Mercado Inmediato</DialogTitle>
               <DialogDescription>
-                Los mercados creados por el Administrador pasan directamente a estado Activo y no otorgan recompensas al creador.
+                Los mercados creados por el Administrador pasan directamente a estado Activo.
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleCreateSubmit} className="space-y-4">
@@ -399,6 +374,10 @@ export default function AdminDashboardClient() {
               <div className="space-y-2">
                 <Label>Descripción (Opcional)</Label>
                 <Textarea placeholder="Contexto de la apuesta..." value={createForm.description} onChange={(e) => setCreateForm((f) => ({ ...f, description: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label>Link de la Imagen (Opcional)</Label>
+                <Input placeholder="https://ejemplo.com/foto.jpg" value={createForm.image_url} onChange={(e) => setCreateForm((f) => ({ ...f, image_url: e.target.value }))} />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -431,12 +410,16 @@ export default function AdminDashboardClient() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Editar mercado</DialogTitle>
-              <DialogDescription>Modificá el título, descripción, categoría o fecha de cierre.</DialogDescription>
+              <DialogDescription>Podés agregarle una imagen antes de aprobarlo, o corregir datos.</DialogDescription>
             </DialogHeader>
             <form onSubmit={handleEditSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label>Pregunta</Label>
                 <Input value={editForm.title} onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))} required />
+              </div>
+              <div className="space-y-2">
+                <Label>Link de la Imagen (Opcional)</Label>
+                <Input placeholder="https://ejemplo.com/foto.jpg" value={editForm.image_url} onChange={(e) => setEditForm((f) => ({ ...f, image_url: e.target.value }))} />
               </div>
               <div className="space-y-2">
                 <Label>Categoría</Label>

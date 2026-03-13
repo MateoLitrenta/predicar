@@ -22,6 +22,7 @@ interface Market {
   total_volume: number;
   end_date: string;
   trending?: "up" | "down";
+  image_url?: string | null; // <--- AGREGAMOS ESTO
 }
 
 type SortOption = "trending" | "newest" | "volume";
@@ -109,7 +110,7 @@ export default function PredictionMarketDashboard() {
 
     const { data, error } = await supabase
       .from("markets")
-      .select("id, title, category, yes_votes, no_votes, total_volume, end_date")
+      .select("id, title, category, yes_votes, no_votes, total_volume, end_date, image_url") // <--- AGREGAMOS image_url
       .eq("status", "active")
       .order("total_volume", { ascending: false });
 
@@ -333,6 +334,7 @@ export default function PredictionMarketDashboard() {
                     totalVolume={Number(market.total_volume ?? 0).toLocaleString()}
                     endDate={formatDate(market.end_date)}
                     trending={market.trending}
+                    imageUrl={market.image_url} // <--- LE PASAMOS LA FOTO A LA TARJETA
                     userId={user?.id ?? null}
                     userPoints={userPoints}
                     onBetPlaced={handlePointsUpdate}

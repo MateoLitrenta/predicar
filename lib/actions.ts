@@ -108,7 +108,7 @@ export async function resolveMarket(marketId: string, outcome: "yes" | "no") {
 
 export async function updateMarket(
   marketId: string,
-  params: { title: string; description: string | null; category: string; end_date: string }
+  params: { title: string; description: string | null; category: string; end_date: string; image_url?: string | null }
 ) {
   const supabase = await createClient();
   const categoryNormalized = params.category
@@ -123,6 +123,7 @@ export async function updateMarket(
       description: params.description || null,
       category: categoryNormalized,
       end_date: params.end_date,
+      image_url: params.image_url, // <--- GUARDAMOS LA FOTO AL EDITAR/APROBAR
     })
     .eq("id", marketId);
 
@@ -150,6 +151,7 @@ export async function createMarket(params: {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
 
+  // Los usuarios normales NO pueden enviar foto, el admin se la pone después
   const { error } = await supabase.from("markets").insert({
     title: params.title,
     description: params.description || null,
@@ -236,7 +238,7 @@ export async function claimDailyBonus(): Promise<{ ok: boolean; error: string | 
 }
 
 export async function updateProfileName(username: string) {
-  const supabase = await createClient(); // <--- ACÁ ESTABA EL ERROR: faltaba el "await"
+  const supabase = await createClient();
   
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "No autorizado" };
@@ -314,6 +316,7 @@ export async function createAdminMarket(params: {
   description: string | null;
   category: string;
   end_date: string;
+  image_url?: string | null; // <--- AGREGAMOS LA FOTO AL CREAR EXPRESS
 }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -343,6 +346,7 @@ export async function createAdminMarket(params: {
     category: categoryNormalized,
     status: "active", 
     end_date: params.end_date,
+    image_url: params.image_url || null, // <--- GUARDAMOS LA FOTO ACÁ
     created_by: user.id,
     yes_votes: 0,
     no_votes: 0,

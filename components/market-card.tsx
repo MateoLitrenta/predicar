@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +35,7 @@ interface MarketCardProps {
   totalVolume: string;
   endDate: string;
   trending?: "up" | "down";
+  imageUrl?: string | null;
   userId: string | null;
   userPoints: number;
   onBetPlaced: (newBalance: number) => void;
@@ -48,6 +50,7 @@ export function MarketCard({
   totalVolume,
   endDate,
   trending,
+  imageUrl,
   userId,
   userPoints,
   onBetPlaced,
@@ -69,7 +72,7 @@ export function MarketCard({
       case "deportes":
         return "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20";
       case "finanzas":
-        return "bg-secondary/20 text-secondary-foreground border-secondary/30";
+        return "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20";
       case "entretenimiento":
         return "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20";
       default:
@@ -93,13 +96,11 @@ export function MarketCard({
 
     const numericAmount = parseInt(betAmount, 10);
     
-    // Validación 1: Monto válido
     if (isNaN(numericAmount) || numericAmount <= 0) {
       toast({ title: "Monto inválido", description: "Ingresá una cantidad válida mayor a 0", variant: "destructive" });
       return;
     }
 
-    // Validación 2: El Patovica del Saldo (Frontend)
     if (numericAmount > userPoints) {
       toast({ 
         title: "Saldo Insuficiente", 
@@ -121,20 +122,16 @@ export function MarketCard({
         p_outcome: outcome,
       });
 
-      // Si la base de datos rechaza la apuesta por algún motivo interno (o error de conexión)
       if (error) {
          toast({ title: "Error al apostar", description: error.message, variant: "destructive" });
          return;
       }
 
-      // Si todo sale bien
       setBetSuccess(true);
       
-      // Calculamos el nuevo balance localmente si el RPC no lo devuelve
       const newBalance = userPoints - numericAmount;
       onBetPlaced(newBalance);
       
-      // Toast de éxito y cerramos el modal después de 1.5 segundos para que se vea la animación
       toast({ title: "¡Apuesta realizada con éxito!", description: `Invertiste ${numericAmount} pts en tu predicción.` });
       
       setTimeout(() => {
@@ -156,40 +153,27 @@ export function MarketCard({
 
   return (
     <>
-      <Card className="group hover:shadow-lg hover:shadow-primary/5 transition-all duration-300 border-border/50 bg-card/80 backdrop-blur-sm">
-        <CardContent className="p-5">
-          <div className="flex items-start justify-between gap-3 mb-4">
-            <Badge
-              variant="outline"
-              className={cn("text-xs font-medium", getCategoryColor(category))}
-            >
-              {category}
-            </Badge>
-            {trending && (
-              <div
-                className={cn(
-                  "flex items-center gap-1 text-xs",
-                  trending === "up"
-                    ? "text-green-500"
-                    : "text-red-500"
-                )}
-              >
-                {trending === "up" ? (
-                  <TrendingUp className="w-3 h-3" />
-                ) : (
-                  <TrendingDown className="w-3 h-3" />
-                )}
-                <span>{trending === "up" ? "+5%" : "-3%"}</span>
-              </div>
+      <Card className="group hover:shadow-lg hover:shadow-primary/5 transition-all duration-300 border-border/50 bg-card/80 backdrop-blur-sm flex flex-col h-full">
+        <CardContent className="pt-4 px-4 pb-2 flex-1 flex flex-col">
+          
+          {/* FOTO Y TÍTULO CLICKABLES PARA IR AL DETALLE */}
+          <Link href={`/market/${id}`} className="flex gap-3 items-start mb-2 group/link cursor-pointer">
+            {imageUrl && (
+              <img 
+                src={imageUrl} 
+                alt="Mercado" 
+                className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg object-cover shrink-0 shadow-sm border border-border/50 mt-0.5 group-hover/link:opacity-80 transition-opacity"
+              />
             )}
-          </div>
+            <h3 className="font-semibold text-foreground leading-snug line-clamp-3 group-hover/link:text-primary transition-colors text-base sm:text-lg">
+              {question}
+            </h3>
+          </Link>
 
-          <h3 className="font-semibold text-foreground leading-tight mb-4 line-clamp-2 group-hover:text-primary transition-colors">
-            {question}
-          </h3>
+          <div className="flex-1" />
 
-          {/* Probability Bar */}
-          <div className="space-y-3 mb-4">
+          {/* BARRAS DE PROBABILIDAD */}
+          <div className="space-y-3 mb-4 mt-4">
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setSelectedOption("yes")}
@@ -224,8 +208,8 @@ export function MarketCard({
             </div>
           </div>
 
-          {/* Stats - FIX: Ajuste en la visualización del Volumen Total */}
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
+          {/* STATS (Volumen y fecha) */}
+          <div className="flex items-center justify-between text-xs text-muted-foreground mb-3">
             <div className="flex items-center gap-1">
               <Coins className="w-3 h-3" />
               <span className="font-medium text-foreground">{totalVolume} pts</span>
@@ -235,9 +219,37 @@ export function MarketCard({
               <span>{endDate}</span>
             </div>
           </div>
+
+          {/* CATEGORÍA Y TRENDING */}
+          <div className="flex items-center justify-between gap-3">
+            <Badge
+              variant="outline"
+              className={cn("text-xs font-medium", getCategoryColor(category))}
+            >
+              {category}
+            </Badge>
+            {trending && (
+              <div
+                className={cn(
+                  "flex items-center gap-1 text-xs font-medium",
+                  trending === "up"
+                    ? "text-green-500"
+                    : "text-red-500"
+                )}
+              >
+                {trending === "up" ? (
+                  <TrendingUp className="w-3.5 h-3.5" />
+                ) : (
+                  <TrendingDown className="w-3.5 h-3.5" />
+                )}
+                <span>{trending === "up" ? "+5%" : "-3%"}</span>
+              </div>
+            )}
+          </div>
+
         </CardContent>
 
-        <CardFooter className="px-5 py-3 border-t border-border/50 bg-muted/30">
+        <CardFooter className="px-4 pb-4 pt-3 shrink-0 border-none">
           <Button
             className="w-full group/btn"
             size="sm"
@@ -277,7 +289,11 @@ export function MarketCard({
             </div>
           ) : (
             <div className="space-y-4 py-2">
-              <div className="p-3 rounded-lg bg-muted/50 text-sm">
+              
+              <div className="p-3 rounded-lg bg-muted/50 text-sm flex gap-3 items-center">
+                {imageUrl && (
+                  <img src={imageUrl} alt="Mercado" className="w-10 h-10 rounded-md object-cover shrink-0 border border-border/50" />
+                )}
                 <p className="font-medium text-foreground line-clamp-2">{question}</p>
               </div>
 
@@ -293,7 +309,6 @@ export function MarketCard({
                   max={userPoints}
                 />
                 
-                {/* FIX: Ocultar balance si no hay usuario logueado */}
                 {userId && (
                   <p className="text-xs text-muted-foreground">
                     Balance disponible: <span className="font-medium text-foreground">{(userPoints || 0).toLocaleString()}</span> pts
