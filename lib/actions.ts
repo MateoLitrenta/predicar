@@ -308,3 +308,48 @@ export async function updateUserPassword(newPassword: string) {
   if (error) return { ok: false, error: error.message };
   return { ok: true, error: null };
 }
+
+export async function createAdminMarket(params: {
+  title: string;
+  description: string | null;
+  category: string;
+  end_date: string;
+}) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) return { ok: false, error: "No autorizado" };
+
+  // Verificamos que realmente sea el admin
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (profile?.role !== "admin") {
+    return { ok: false, error: "Acceso denegado. No sos administrador." };
+  }
+
+  const categoryNormalized = params.category
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+  // Lo insertamos directamente como "active" (activo)
+  const { error } = await supabase.from("markets").insert({
+    title: params.title,
+    description: params.description || null,
+    category: categoryNormalized,
+    status: "active", 
+    end_date: params.end_date,
+    created_by: user.id,
+    yes_votes: 0,
+    no_votes: 0,
+    total_volume: 0,
+    yes_percentage: 50,
+  });
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, error: null };
+}

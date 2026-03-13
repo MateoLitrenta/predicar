@@ -3,7 +3,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { getProfile, getAdminMarkets, approveMarket, rejectMarket, resolveMarket, updateMarket, deleteMarket } from "@/lib/actions";
+// FIX: Sumamos createAdminMarket a las importaciones
+import { getProfile, getAdminMarkets, approveMarket, rejectMarket, resolveMarket, updateMarket, deleteMarket, createAdminMarket } from "@/lib/actions";
 import type { ProfileResult } from "@/lib/actions";
 import { createClient } from "@/lib/supabase/client";
 import { NavHeader } from "@/components/nav-header";
@@ -35,7 +36,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, CheckCircle2, XCircle, Flag, ArrowLeft, Pencil, Calendar, AlertTriangle, Trash2 } from "lucide-react";
+// FIX: Sumamos el ícono Plus
+import { Loader2, CheckCircle2, XCircle, Flag, ArrowLeft, Pencil, Calendar, AlertTriangle, Trash2, Plus } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
 interface Market {
@@ -67,6 +69,11 @@ export default function AdminDashboardClient() {
   const [isSaving, setIsSaving] = useState(false);
   const [editForm, setEditForm] = useState({ title: "", description: "", category: "", end_date: "" });
   
+  // NUEVO: Estados para la creación rápida del Admin
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [createForm, setCreateForm] = useState({ title: "", description: "", category: "politica", end_date: "" });
+
   // Estados para las confirmaciones peligrosas
   const [resolvingMarket, setResolvingMarket] = useState<{ id: string, outcome: 'yes' | 'no', title: string } | null>(null);
   const [deletingMarket, setDeletingMarket] = useState<{ id: string, title: string } | null>(null);
@@ -149,6 +156,28 @@ export default function AdminDashboardClient() {
     } else {
       toast({ title: "Mercado actualizado", description: "Los cambios se guardaron." });
       setEditingMarket(null);
+      await fetchMarkets();
+    }
+  };
+
+  // NUEVO: Función para que el Admin cree mercados instantáneos
+  const handleCreateSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsCreating(true);
+    const { error } = await createAdminMarket({
+      title: createForm.title.trim(),
+      description: createForm.description.trim() || null,
+      category: createForm.category,
+      end_date: createForm.end_date,
+    });
+    setIsCreating(false);
+
+    if (error) {
+      toast({ title: "Error al crear", description: error, variant: "destructive" });
+    } else {
+      toast({ title: "Mercado Activo", description: "El mercado se creó y ya está público." });
+      setIsCreateModalOpen(false);
+      setCreateForm({ title: "", description: "", category: "politica", end_date: "" }); // Reset
       await fetchMarkets();
     }
   };
@@ -262,9 +291,17 @@ export default function AdminDashboardClient() {
 
       <div className="container mx-auto px-4 py-8">
         <div className="mb-6"><Button variant="ghost" size="sm" asChild><Link href="/"><ArrowLeft className="w-4 h-4 mr-2" />Volver</Link></Button></div>
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Panel de <span className="text-primary">Administración</span></h1>
-          <p className="text-muted-foreground text-lg">Aprobá propuestas y resolvé mercados en vivo.</p>
+        
+        {/* FIX: Modificamos el Header para agregar el botón de crear */}
+        <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">Panel de <span className="text-primary">Administración</span></h1>
+            <p className="text-muted-foreground text-lg">Aprobá propuestas y resolvé mercados en vivo.</p>
+          </div>
+          <Button onClick={() => setIsCreateModalOpen(true)} className="shrink-0 bg-primary hover:bg-primary/90">
+            <Plus className="w-4 h-4 mr-2" />
+            Crear Mercado Rápido
+          </Button>
         </div>
 
         {isLoading ? (
@@ -344,6 +381,50 @@ export default function AdminDashboardClient() {
             </Table>
           </div>
         )}
+
+        {/* Modal de Creación Rápida (Exclusivo Admin) */}
+        <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Crear Mercado Inmediato</DialogTitle>
+              <DialogDescription>
+                Los mercados creados por el Administrador pasan directamente a estado Activo y no otorgan recompensas al creador.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleCreateSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label>Pregunta</Label>
+                <Input placeholder="Ej: ¿Boca ganará la Libertadores?" value={createForm.title} onChange={(e) => setCreateForm((f) => ({ ...f, title: e.target.value }))} required />
+              </div>
+              <div className="space-y-2">
+                <Label>Descripción (Opcional)</Label>
+                <Textarea placeholder="Contexto de la apuesta..." value={createForm.description} onChange={(e) => setCreateForm((f) => ({ ...f, description: e.target.value }))} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Categoría</Label>
+                  <Select value={createForm.category} onValueChange={(v) => setCreateForm((f) => ({ ...f, category: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="politica">Política</SelectItem>
+                      <SelectItem value="deportes">Deportes</SelectItem>
+                      <SelectItem value="finanzas">Finanzas</SelectItem>
+                      <SelectItem value="entretenimiento">Entretenimiento</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Fecha de Cierre</Label>
+                  <Input type="date" value={createForm.end_date} onChange={(e) => setCreateForm((f) => ({ ...f, end_date: e.target.value }))} required />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setIsCreateModalOpen(false)}>Cancelar</Button>
+                <Button type="submit" disabled={isCreating}>{isCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : "Publicar Activo"}</Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
 
         {/* Modal de Edición */}
         <Dialog open={!!editingMarket} onOpenChange={(open) => !open && setEditingMarket(null)}>

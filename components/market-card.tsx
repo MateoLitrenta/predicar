@@ -224,11 +224,11 @@ export function MarketCard({
             </div>
           </div>
 
-          {/* Stats */}
+          {/* Stats - FIX: Ajuste en la visualización del Volumen Total */}
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <div className="flex items-center gap-1">
               <Coins className="w-3 h-3" />
-              <span className="font-medium text-secondary-foreground">{totalVolume} pts</span>
+              <span className="font-medium text-foreground">{totalVolume} pts</span>
             </div>
             <div className="flex items-center gap-1">
               <Clock className="w-3 h-3" />
@@ -292,9 +292,13 @@ export function MarketCard({
                   min={1}
                   max={userPoints}
                 />
-                <p className="text-xs text-muted-foreground">
-                  Balance disponible: <span className="font-medium text-foreground">{(userPoints || 0).toLocaleString()}</span> pts
-                </p>
+                
+                {/* FIX: Ocultar balance si no hay usuario logueado */}
+                {userId && (
+                  <p className="text-xs text-muted-foreground">
+                    Balance disponible: <span className="font-medium text-foreground">{(userPoints || 0).toLocaleString()}</span> pts
+                  </p>
+                )}
               </div>
 
               {/* Quick Amounts */}

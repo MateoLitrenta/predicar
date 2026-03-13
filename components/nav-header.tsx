@@ -246,11 +246,14 @@ export function NavHeader({
           </Link>
 
           <div className="hidden md:flex items-center gap-3">
-            <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-secondary/20 border border-secondary/30">
-              <Coins className="w-5 h-5 text-secondary-foreground" />
-              <span className="font-semibold text-foreground">{(points || 0).toLocaleString()}</span>
-              <span className="text-sm text-muted-foreground">pts</span>
-            </div>
+            {/* FIX: Ocultar el pill de puntos si no hay usuario (Desktop) */}
+            {userId && (
+              <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-secondary/20 border border-secondary/30">
+                <Coins className="w-5 h-5 text-secondary-foreground" />
+                <span className="font-semibold text-foreground">{(points || 0).toLocaleString()}</span>
+                <span className="text-sm text-muted-foreground">pts</span>
+              </div>
+            )}
 
             <Button variant="ghost" asChild className="hover:text-amber-500 hover:bg-amber-500/10 transition-colors">
               <Link href="/ranking">
@@ -277,7 +280,6 @@ export function NavHeader({
                     )}
                   </Button>
                 </PopoverTrigger>
-                {/* LA SOLUCIÓN ESTÁ ACÁ: Agrandamos la caja contenedora */}
                 <PopoverContent align="end" className="w-[340px] sm:w-[400px] p-0">
                   <NotificationsList />
                 </PopoverContent>
@@ -324,10 +326,14 @@ export function NavHeader({
           </div>
 
           <div className="md:hidden flex items-center gap-2">
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/20">
-              <Coins className="w-4 h-4 text-secondary-foreground" />
-              <span className="font-semibold text-sm">{(points || 0).toLocaleString()}</span>
-            </div>
+            {/* FIX: Ocultar el pill de puntos si no hay usuario (Mobile) */}
+            {userId && (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/20">
+                <Coins className="w-4 h-4 text-secondary-foreground" />
+                <span className="font-semibold text-sm">{(points || 0).toLocaleString()}</span>
+              </div>
+            )}
+            
             {userId && (
               <Popover onOpenChange={handleOpenNotifications}>
                 <PopoverTrigger asChild>
@@ -341,7 +347,6 @@ export function NavHeader({
                     )}
                   </Button>
                 </PopoverTrigger>
-                {/* LA SOLUCIÓN ESTÁ ACÁ TAMBIÉN: Agrandamos la caja contenedora para celu */}
                 <PopoverContent align="end" className="w-[340px] sm:w-[400px] p-0">
                   <NotificationsList />
                 </PopoverContent>

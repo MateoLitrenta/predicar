@@ -123,3 +123,15 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Ocultar flechas de inputs numéricos en Chrome, Safari, Edge, Opera */
+input[type=number]::-webkit-inner-spin-button, 
+input[type=number]::-webkit-outer-spin-button { 
+  -webkit-appearance: none; 
+  margin: 0; 
+}
+
+/* Ocultar flechas de inputs numéricos en Firefox */
+input[type=number] {
+  -moz-appearance: textfield;
+}
