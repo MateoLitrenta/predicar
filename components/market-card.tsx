@@ -34,7 +34,7 @@ interface MarketCardProps {
   totalVolume: string;
   endDate: string;
   imageUrl?: string | null;
-  options: MarketOption[]; // NUEVO: Recibe la lista de opciones
+  options: MarketOption[];
   userId: string | null;
   userPoints: number;
   onBetPlaced: (newBalance: number) => void;
@@ -55,10 +55,7 @@ export function MarketCard({
   onOpenAuthModal,
 }: MarketCardProps) {
   const router = useRouter();
-  
-  // NUEVO: Ahora seleccionamos por ID
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
-  
   const [isBetModalOpen, setIsBetModalOpen] = useState(false);
   const [betAmount, setBetAmount] = useState("");
   const [isPlacingBet, setIsPlacingBet] = useState(false);
@@ -90,66 +87,44 @@ export function MarketCard({
 
   const handlePlaceBet = async () => {
     if (!userId || !selectedOptionId || !betAmount) return;
-
     const numericAmount = parseInt(betAmount, 10);
     
     if (isNaN(numericAmount) || numericAmount <= 0) {
-      toast({ title: "Monto inválido", description: "Ingresá una cantidad válida mayor a 0", variant: "destructive" });
+      toast({ title: "Monto inválido", description: "Ingresá una cantidad válida", variant: "destructive" });
       return;
     }
-
     if (numericAmount > userPoints) {
-      toast({ title: "Saldo Insuficiente", description: `No podés apostar ${numericAmount} pts. Solo tenés ${userPoints} pts disponibles.`, variant: "destructive" });
+      toast({ title: "Saldo Insuficiente", description: `Solo tenés ${userPoints} pts disponibles.`, variant: "destructive" });
       return;
     }
 
     setIsPlacingBet(true);
-
     try {
       const supabase = createClient();
-      
-      // Enviamos la apuesta con el ID de la opción
       const { error } = await supabase.rpc("realizar_apuesta", {
-        p_amount: numericAmount,
-        p_market_id: id,
-        p_outcome: selectedOptionId,
+        p_amount: numericAmount, p_market_id: id, p_outcome: selectedOptionId,
       });
 
-      if (error) {
-         toast({ title: "Error al apostar", description: error.message, variant: "destructive" });
-         return;
-      }
+      if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
 
       setBetSuccess(true);
-      
-      const newBalance = userPoints - numericAmount;
-      onBetPlaced(newBalance);
-      
-      // Buscamos el nombre para mostrarlo en la notificación
+      onBetPlaced(userPoints - numericAmount);
       const optionName = options.find(o => o.id === selectedOptionId)?.option_name || "la opción";
-      toast({ title: "¡Apuesta realizada con éxito!", description: `Invertiste ${numericAmount} pts a ${optionName}.` });
+      toast({ title: "¡Apuesta confirmada!", description: `Invertiste ${numericAmount} pts a ${optionName}.` });
       
-      setTimeout(() => {
-        setIsBetModalOpen(false);
-        setSelectedOptionId(null);
-        setBetSuccess(false);
-        router.refresh();
-      }, 1500);
-
+      setTimeout(() => { setIsBetModalOpen(false); setSelectedOptionId(null); setBetSuccess(false); router.refresh(); }, 1500);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Error de conexión";
-      toast({ title: "Error", description: message, variant: "destructive" });
+      toast({ title: "Error", description: "Error de conexión", variant: "destructive" });
     } finally {
       setIsPlacingBet(false);
     }
   };
-  const quickAmounts = [100, 500, 1000];
 
-  // Cálculos de porcentajes basados en las opciones reales
   const totalVotesMulti = options.reduce((sum, opt) => sum + Number(opt.total_votes), 0);
-  const displayOptions = options.slice(0, 2); // Solo mostramos las primeras 2 opciones en la tarjeta pequeña
+  
+  // AHORA MOSTRAMOS HASTA 4 OPCIONES
+  const displayOptions = options.slice(0, 4); 
 
-  // Encontramos el nombre de la opción seleccionada para el modal
   const selectedOptionName = options.find(o => o.id === selectedOptionId)?.option_name || "una opción";
 
   return (
@@ -165,9 +140,9 @@ export function MarketCard({
 
           <div className="flex-1" />
 
-          {/* DIBUJAMOS LAS OPCIONES REALES */}
           <div className="space-y-3 mb-4 mt-4">
-            <div className="flex items-center gap-2">
+            {/* GRILLA DE 2 COLUMNAS PARA LOS BOTONES */}
+            <div className="grid grid-cols-2 gap-2">
               {displayOptions.map((opt) => {
                 const pct = totalVotesMulti === 0 ? (100 / options.length) : ((Number(opt.total_votes) / totalVotesMulti) * 100);
                 const isSelected = selectedOptionId === opt.id;
@@ -175,11 +150,11 @@ export function MarketCard({
                   <button
                     key={opt.id}
                     onClick={() => setSelectedOptionId(opt.id)}
-                    className={cn("flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all text-center truncate")}
+                    className={cn("py-2 px-2 rounded-lg text-xs font-semibold transition-all text-center truncate border border-transparent")}
                     style={{
                       backgroundColor: isSelected ? opt.color : `${opt.color}15`,
-                      color: isSelected ? '#ffffff' : opt.color, // Texto blanco si está seleccionado
-                      boxShadow: isSelected ? '0 4px 6px -1px rgb(0 0 0 / 0.1)' : 'none',
+                      color: isSelected ? '#ffffff' : opt.color,
+                      borderColor: isSelected ? opt.color : 'transparent',
                     }}
                   >
                     {opt.option_name} {Math.round(pct)}%
@@ -188,19 +163,17 @@ export function MarketCard({
               })}
             </div>
 
-            {/* BARRITA DE PROGRESO DE LAS PRIMERAS 2 OPCIONES */}
-            {displayOptions.length === 2 && (
-              <div className="h-2 w-full rounded-full overflow-hidden flex">
-                <div className="h-full transition-all duration-1000" style={{ width: `${totalVotesMulti === 0 ? 50 : (Number(displayOptions[0].total_votes) / totalVotesMulti) * 100}%`, backgroundColor: displayOptions[0].color }} />
-                <div className="h-full transition-all duration-1000" style={{ width: `${totalVotesMulti === 0 ? 50 : (Number(displayOptions[1].total_votes) / totalVotesMulti) * 100}%`, backgroundColor: displayOptions[1].color }} />
-              </div>
-            )}
+            {/* BARRA PROPORCIONAL PARA TODAS LAS OPCIONES */}
+            <div className="h-1.5 w-full rounded-full overflow-hidden flex">
+              {options.map((opt) => (
+                <div key={`bar-${opt.id}`} className="h-full transition-all duration-1000" style={{ width: `${totalVotesMulti === 0 ? (100 / options.length) : (Number(opt.total_votes) / totalVotesMulti) * 100}%`, backgroundColor: opt.color }} />
+              ))}
+            </div>
             
-            {/* AVISO SI HAY MÁS OPCIONES */}
-            {options.length > 2 && (
+            {options.length > 4 && (
               <div className="text-center pt-1">
                 <Link href={`/market/${id}`} className="text-xs font-semibold text-muted-foreground hover:text-primary transition-colors">
-                  Ver {options.length - 2} opciones más <ChevronRight className="w-3 h-3 inline" />
+                  Ver {options.length - 4} opciones más <ChevronRight className="w-3 h-3 inline" />
                 </Link>
               </div>
             )}
@@ -225,6 +198,7 @@ export function MarketCard({
       </Card>
 
       <Dialog open={isBetModalOpen} onOpenChange={setIsBetModalOpen}>
+        {/* ... Modal idéntico al anterior ... */}
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Coins className="w-5 h-5 text-primary" /> Realizar Predicción</DialogTitle>
@@ -248,8 +222,8 @@ export function MarketCard({
                 {userId && <p className="text-xs text-muted-foreground">Balance disponible: <span className="font-medium text-foreground">{(userPoints || 0).toLocaleString()}</span> pts</p>}
               </div>
               <div className="flex gap-2">
-                {quickAmounts.map((amount) => (
-                  <Button key={amount} type="button" variant="outline" size="sm" onClick={() => setBetAmount(amount.toString())} disabled={amount > userPoints} className="flex-1">{amount}</Button>
+                {[100, 500, 1000].map((amount) => (
+                  <Button key={amount} type="button" variant="outline" size="sm" onClick={() => setBetAmount(amount.toString())} disabled={amount > userPoints} className="flex-1">+{amount}</Button>
                 ))}
               </div>
               <Button className="w-full" onClick={handlePlaceBet} disabled={isPlacingBet || !betAmount || !userId}>
