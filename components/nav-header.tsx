@@ -35,7 +35,7 @@ import {
   Trophy,
   Trash2,
   MessageSquare,
-  TrendingUp // <-- ¡ACÁ ESTÁ LA FLECHA QUE FALTABA!
+  TrendingUp
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
@@ -278,7 +278,7 @@ export function NavHeader({
       <div className="container mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
           
-          {/* LOGO PREDIX CON CÓDIGO (Sin imágenes) */}
+          {/* LOGO PREDIX CON CÓDIGO */}
           <Link href="/" className="flex items-center hover:opacity-90 transition-opacity py-2 group mr-4">
             <div className="flex items-baseline">
               <span className="text-2xl sm:text-3xl font-black tracking-tighter text-foreground">
@@ -288,7 +288,6 @@ export function NavHeader({
                 <span className="text-2xl sm:text-3xl font-black tracking-tighter text-amber-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.3)]">
                   X
                 </span>
-                {/* La flecha de crecimiento saliendo de la X */}
                 <TrendingUp 
                   className="absolute -top-2.5 -right-5 w-6 h-6 text-amber-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.4)] group-hover:-translate-y-1 group-hover:translate-x-1 transition-transform duration-300" 
                   strokeWidth={3} 
@@ -297,6 +296,7 @@ export function NavHeader({
             </div>
           </Link>
 
+          {/* MENÚ DESKTOP */}
           <div className="hidden md:flex items-center gap-3">
             {userId && (
               <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-secondary/20 border border-secondary/30">
@@ -376,9 +376,10 @@ export function NavHeader({
             )}
           </div>
 
-          <div className="md:hidden flex items-center gap-2">
+          {/* BOTONES MÓVILES (Notificaciones y Hamburguesa) */}
+          <div className="md:hidden flex items-center gap-1">
             {userId && (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/20">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 mr-1 rounded-lg bg-secondary/20">
                 <Coins className="w-4 h-4 text-secondary-foreground" />
                 <span className="font-semibold text-sm">{(points || 0).toLocaleString()}</span>
               </div>
@@ -387,10 +388,10 @@ export function NavHeader({
             {userId && (
               <Popover onOpenChange={handleOpenNotifications}>
                 <PopoverTrigger asChild>
-                  <Button variant="ghost" size="icon" className="relative h-8 w-8">
-                    <Bell className="w-4 h-4" />
+                  <Button variant="ghost" size="icon" className="relative h-9 w-9">
+                    <Bell className="w-5 h-5" />
                     {unreadCount > 0 && (
-                      <span className="absolute top-1 right-1.5 flex h-2 w-2">
+                      <span className="absolute top-1.5 right-1.5 flex h-2 w-2">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
                       </span>
@@ -402,64 +403,89 @@ export function NavHeader({
                 </PopoverContent>
               </Popover>
             )}
-            <Button variant="ghost" size="icon" onClick={() => setShowMobileMenu(!showMobileMenu)}>
-              {showMobileMenu ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => setShowMobileMenu(!showMobileMenu)}>
+              {showMobileMenu ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </Button>
           </div>
         </div>
+      </div>
 
-        {showMobileMenu && (
-          <div className="md:hidden py-4 border-t border-border/40 space-y-3">
+      {/* EL NUEVO MENÚ MÓVIL (Overlay Flotante) */}
+      {showMobileMenu && (
+        <div className="md:hidden absolute top-full left-0 w-full bg-background/95 backdrop-blur-xl border-b border-border/50 shadow-2xl overflow-hidden animate-in slide-in-from-top-2 duration-200 z-50">
+          <div className="p-4 space-y-4">
+            
+            {/* Tarjeta de Usuario */}
             {userId ? (
-              <div className="flex items-center gap-3 px-2 py-2 rounded-lg bg-muted/50">
-                <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
-                  <User className="w-5 h-5 text-primary" />
+              <div className="flex items-center gap-4 p-4 rounded-2xl bg-muted/30 border border-border/50">
+                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30 shrink-0">
+                  <User className="w-6 h-6 text-primary" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{userEmail}</p>
-                  <p className="text-xs text-muted-foreground">{points.toLocaleString()} puntos</p>
+                  <p className="text-base font-bold text-foreground truncate">{getUserDisplayName()}</p>
+                  <p className="text-sm font-medium text-amber-500 mt-0.5">{points.toLocaleString()} pts disponibles</p>
                 </div>
               </div>
             ) : (
-              <Button onClick={() => { setShowMobileMenu(false); onOpenAuthModal(); }} className="w-full">
-                <User className="w-4 h-4 mr-2" />Ingresar / Registrarse
+              <Button onClick={() => { setShowMobileMenu(false); onOpenAuthModal(); }} className="w-full h-12 text-base font-bold rounded-xl">
+                <User className="w-5 h-5 mr-2" /> Ingresar / Registrarse
               </Button>
             )}
             
-            <Button variant="ghost" className="w-full justify-start text-amber-500 hover:text-amber-600 hover:bg-amber-500/10" asChild>
-              <Link href="/ranking" onClick={() => setShowMobileMenu(false)}>
-                <Trophy className="w-4 h-4 mr-2" />Ranking
-              </Link>
-            </Button>
+            {/* Botones de Navegación Rápida */}
+            <div className="grid grid-cols-2 gap-3">
+              <Button variant="outline" className="h-16 flex flex-col items-center justify-center gap-1 border-border/50 hover:bg-muted/50 rounded-xl bg-card" asChild>
+                <Link href="/ranking" onClick={() => setShowMobileMenu(false)}>
+                  <Trophy className="w-5 h-5 text-amber-500" />
+                  <span className="text-xs font-semibold mt-1">Ranking Global</span>
+                </Link>
+              </Button>
 
-            <Button onClick={userId ? handleClaimBonus : onOpenAuthModal} disabled={isClaimingBonus} variant="outline" className="w-full justify-center bg-transparent">
-              {isClaimingBonus ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Gift className="w-4 h-4 mr-2" />} Bonus Diario
-            </Button>
-
-            <div className="flex items-center justify-center gap-4">
-              <Button variant="ghost" size="icon" onClick={onToggleDarkMode}>
-                {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              <Button onClick={userId ? handleClaimBonus : onOpenAuthModal} disabled={isClaimingBonus} variant="outline" className={cn("h-16 flex flex-col items-center justify-center gap-1 border-border/50 rounded-xl bg-card", bonusClaimed && "border-green-500/50 bg-green-500/10")}>
+                {isClaimingBonus ? <Loader2 className="w-5 h-5 animate-spin" /> : <Gift className={cn("w-5 h-5", bonusClaimed ? "text-green-500" : "text-primary")} />}
+                <span className="text-xs font-semibold mt-1">{bonusClaimed ? "¡Reclamado!" : "Bonus Diario"}</span>
               </Button>
             </div>
 
+            {/* Opciones de la Cuenta */}
             {userId && (
-              <>
-                <Button variant="ghost" className="w-full justify-start" asChild>
-                  <Link href="/profile" onClick={() => setShowMobileMenu(false)}><UserCircle className="w-4 h-4 mr-2" />Mi Perfil</Link>
+              <div className="space-y-1 bg-muted/10 p-2 rounded-2xl border border-border/50">
+                <Button variant="ghost" className="w-full justify-start h-12 rounded-xl" asChild>
+                  <Link href="/profile" onClick={() => setShowMobileMenu(false)}>
+                    <UserCircle className="w-5 h-5 mr-3 text-muted-foreground" />
+                    <span className="text-sm font-medium">Mi Perfil (Portfolio)</span>
+                  </Link>
                 </Button>
+                
                 {isAdmin && (
-                  <Button variant="ghost" className="w-full justify-start" asChild>
-                    <Link href="/admin" onClick={() => setShowMobileMenu(false)}><ShieldCheck className="w-4 h-4 mr-2" />Panel Admin</Link>
+                  <Button variant="ghost" className="w-full justify-start h-12 rounded-xl" asChild>
+                    <Link href="/admin" onClick={() => setShowMobileMenu(false)}>
+                      <ShieldCheck className="w-5 h-5 mr-3 text-amber-500" />
+                      <span className="text-sm font-medium">Panel de Control</span>
+                    </Link>
                   </Button>
                 )}
-                <Button onClick={() => { setShowMobileMenu(false); onSignOut(); }} variant="ghost" className="w-full text-red-600 dark:text-red-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-500/10">
-                  <LogOut className="w-4 h-4 mr-2" />Cerrar Sesión
+
+                <div className="flex items-center justify-between px-4 py-2 my-1">
+                  <div className="flex items-center gap-3">
+                    {isDarkMode ? <Moon className="w-5 h-5 text-muted-foreground" /> : <Sun className="w-5 h-5 text-muted-foreground" />}
+                    <span className="text-sm font-medium">Modo Oscuro</span>
+                  </div>
+                  <Button variant="ghost" size="icon" onClick={onToggleDarkMode} className="rounded-full h-8 w-8 bg-background border border-border/50">
+                    {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                  </Button>
+                </div>
+
+                <Button onClick={() => { setShowMobileMenu(false); onSignOut(); }} variant="ghost" className="w-full justify-start h-12 text-red-500 hover:text-red-600 hover:bg-red-500/10 rounded-xl mt-1">
+                  <LogOut className="w-5 h-5 mr-3" />
+                  <span className="text-sm font-medium">Cerrar Sesión</span>
                 </Button>
-              </>
+              </div>
             )}
+            
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </header>
   );
 }

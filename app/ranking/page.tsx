@@ -14,7 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Trophy, Loader2, ArrowLeft, Medal, User as UserIcon, ChevronRight } from "lucide-react";
+import { Trophy, Loader2, ArrowLeft, Medal, User as UserIcon, ChevronRight, Activity, TrendingUp } from "lucide-react";
 
 interface RankedUser {
   id: string;
@@ -61,9 +61,8 @@ export default function RankingPage() {
     return "Usuario Anónimo";
   };
 
-  // Función para abrir la tarjeta del usuario
+  // Función para abrir la tarjeta del usuario y calcular estadísticas
   const openUserProfile = async (user: RankedUser, position: number) => {
-    // Ya tenemos puntos, avatar y ranking. Solo calculamos la tasa de acierto.
     setSelectedUserProfile({
       id: user.id,
       username: getDisplayName(user),
@@ -134,21 +133,29 @@ export default function RankingPage() {
           <Button variant="ghost" size="sm" asChild className="text-muted-foreground hover:text-foreground -ml-2">
             <Link href="/" className="flex items-center gap-2">
               <ArrowLeft className="w-4 h-4" />
-              Volver al Mercado
+              Volver a Mercados
             </Link>
           </Button>
         </div>
 
-        <div className="max-w-3xl mx-auto">
-          <div className="text-center mb-8">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center mb-10">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-500/10 border border-amber-500/20 mb-4 shadow-inner">
               <Trophy className="w-8 h-8 text-amber-500" />
             </div>
-            <h1 className="text-3xl md:text-4xl font-bold mb-2">
-              Ranking de <span className="text-primary">PredicAR</span>
+            {/* AQUÍ ESTÁ EL REBRANDING A PREDIX CON EL LOGO TIPOGRÁFICO DE LA BARRA */}
+            <h1 className="text-3xl md:text-5xl font-bold mb-3 flex items-center justify-center gap-2">
+              Ranking de 
+              <div className="flex items-baseline ml-2">
+                <span className="font-black tracking-tighter text-foreground">PREDI</span>
+                <div className="relative">
+                  <span className="font-black tracking-tighter text-amber-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.3)]">X</span>
+                  <TrendingUp className="absolute -top-2.5 -right-5 w-6 h-6 text-amber-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.4)]" strokeWidth={3} />
+                </div>
+              </div>
             </h1>
-            <p className="text-muted-foreground text-lg">
-              Los mejores visionarios de la plataforma. ¿Estás entre los Top 50?
+            <p className="text-muted-foreground text-lg mt-4">
+              Los traders más rentables de la plataforma. ¿Estás entre los Top 50?
             </p>
           </div>
 
@@ -158,7 +165,7 @@ export default function RankingPage() {
                 <CardTitle className="text-xl flex items-center gap-2">
                   <Medal className="w-5 h-5 text-primary" /> Top Global
                 </CardTitle>
-                <CardDescription>Ordenado por puntos totales</CardDescription>
+                <CardDescription>Traders ordenados por puntos totales</CardDescription>
               </div>
             </CardHeader>
             <CardContent className="p-0">
@@ -177,15 +184,14 @@ export default function RankingPage() {
                     const position = index + 1;
 
                     return (
-                      // Cambiamos el Link por un div con onClick para abrir el modal
                       <div
                         key={user.id}
                         onClick={() => openUserProfile(user, position)}
-                        className={`group flex items-center justify-between p-4 sm:px-6 transition-all duration-200 hover:bg-muted/40 cursor-pointer ${
+                        className={`group flex flex-col sm:flex-row sm:items-center justify-between p-4 sm:px-6 transition-all duration-200 hover:bg-muted/40 cursor-pointer ${
                           isCurrentUser ? "bg-primary/5 border-l-4 border-l-primary" : "border-l-4 border-l-transparent"
                         }`}
                       >
-                        <div className="flex items-center gap-4 sm:gap-6">
+                        <div className="flex items-center gap-4 sm:gap-6 mb-3 sm:mb-0">
                           <div className="w-8 flex justify-center font-bold text-lg shrink-0">
                             {position === 1 ? (
                               <Medal className="w-7 h-7 text-amber-400 drop-shadow-md" />
@@ -217,20 +223,26 @@ export default function RankingPage() {
                                 {getDisplayName(user)}
                                 {isCurrentUser && <span className="text-[10px] uppercase tracking-wider font-bold bg-primary/20 text-primary px-2 py-0.5 rounded-full">Vos</span>}
                               </p>
+                              {/* Agregamos el botoncito sutil para invitar a ver estadísticas */}
+                              <div className="flex items-center gap-1 mt-0.5 text-xs text-muted-foreground opacity-70 group-hover:opacity-100 transition-opacity">
+                                <Activity className="w-3 h-3" />
+                                <span>Ver estadísticas</span>
+                              </div>
                             </div>
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center justify-end gap-6 sm:gap-8 ml-12 sm:ml-0">
                           <div className="text-right">
-                            <p className="font-bold text-lg sm:text-xl text-foreground">
+                            <p className="font-bold text-xl sm:text-2xl text-foreground flex items-center gap-1.5 justify-end">
+                              <span className="text-amber-500 text-sm hidden sm:inline">PTS</span>
                               {user.points.toLocaleString()}
                             </p>
-                            <p className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider font-medium">
-                              Puntos
+                            <p className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider font-medium block sm:hidden">
+                              Puntos Totales
                             </p>
                           </div>
-                          <ChevronRight className="w-5 h-5 text-muted-foreground opacity-0 -ml-2 group-hover:opacity-100 group-hover:translate-x-1 transition-all shrink-0 hidden sm:block" />
+                          <ChevronRight className="w-5 h-5 text-muted-foreground opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all shrink-0 hidden sm:block" />
                         </div>
                       </div>
                     );
@@ -244,51 +256,61 @@ export default function RankingPage() {
 
       {/* MODAL DE RESUMEN DE PERFIL */}
       <Dialog open={isProfileModalOpen} onOpenChange={setIsProfileModalOpen}>
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent className="sm:max-w-sm border-border/50 shadow-2xl">
           <DialogHeader>
-            <DialogTitle className="text-center">Resumen del Jugador</DialogTitle>
+            <DialogTitle className="text-center text-lg uppercase tracking-widest text-muted-foreground">Trade Report</DialogTitle>
           </DialogHeader>
           
           {isLoadingProfileStats ? (
             <div className="py-12 flex flex-col items-center justify-center text-muted-foreground">
               <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
-              <p className="text-sm">Analizando estadísticas...</p>
+              <p className="text-sm font-medium">Analizando operaciones...</p>
             </div>
           ) : selectedUserProfile ? (
             <div className="flex flex-col items-center gap-4 py-2">
-              <div className="w-20 h-20 rounded-full bg-primary/10 border-2 border-primary/20 flex items-center justify-center shadow-sm overflow-hidden">
+              <div className="w-24 h-24 rounded-full bg-primary/10 border-4 border-background ring-2 ring-primary/20 flex items-center justify-center shadow-lg overflow-hidden">
                 {selectedUserProfile.avatar_url ? (
                   <img src={selectedUserProfile.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
                 ) : (
-                  <UserIcon className="w-10 h-10 text-primary" />
+                  <UserIcon className="w-12 h-12 text-primary" />
                 )}
               </div>
               
-              <h3 className="text-2xl font-bold text-foreground mt-1">{selectedUserProfile.username}</h3>
+              <h3 className="text-2xl font-black text-foreground mt-1 tracking-tight">{selectedUserProfile.username}</h3>
               
-              <div className="grid grid-cols-2 gap-3 w-full text-center mt-2">
-                <div className="bg-muted/30 p-3 rounded-xl border border-border/50 shadow-sm">
-                  <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider mb-1">Puntos</p>
-                  <p className="font-bold text-lg text-amber-500">{selectedUserProfile.points.toLocaleString()}</p>
-                </div>
-                <div className="bg-muted/30 p-3 rounded-xl border border-border/50 shadow-sm">
-                  <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider mb-1">Ranking</p>
-                  <p className="font-bold text-lg text-foreground">#{selectedUserProfile.rank}</p>
-                </div>
-                <div className="bg-muted/30 p-3 rounded-xl border border-border/50 col-span-2 shadow-sm">
-                  <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider mb-1">Tasa de Acierto</p>
-                  <p className="font-bold text-2xl text-green-500">
-                    {selectedUserProfile.totalResolved > 0 ? `${selectedUserProfile.winRate}%` : 'Sin datos'}
+              <div className="grid grid-cols-2 gap-3 w-full text-center mt-4">
+                <div className="bg-muted/30 p-4 rounded-xl border border-border/50 shadow-sm flex flex-col justify-center">
+                  <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1 flex justify-center items-center gap-1">
+                    <Trophy className="w-3 h-3" /> Ranking
                   </p>
-                  <p className="text-[10px] text-muted-foreground uppercase font-medium mt-0.5">
-                    De {selectedUserProfile.totalResolved} predicciones finalizadas
+                  <p className="font-black text-2xl text-foreground">#{selectedUserProfile.rank}</p>
+                </div>
+                
+                <div className="bg-muted/30 p-4 rounded-xl border border-border/50 shadow-sm flex flex-col justify-center">
+                  <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1 flex justify-center items-center gap-1">
+                    <Activity className="w-3 h-3" /> Win Rate
+                  </p>
+                  <p className={`font-black text-2xl ${selectedUserProfile.winRate > 50 ? 'text-green-500' : selectedUserProfile.winRate > 0 ? 'text-amber-500' : 'text-foreground'}`}>
+                    {selectedUserProfile.totalResolved > 0 ? `${selectedUserProfile.winRate}%` : '-'}
+                  </p>
+                </div>
+                
+                <div className="bg-muted/30 p-4 rounded-xl border border-border/50 col-span-2 shadow-sm">
+                  <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1 flex justify-center items-center gap-1">
+                    <TrendingUp className="w-3 h-3 text-amber-500" /> Capital Total
+                  </p>
+                  <p className="font-black text-3xl text-amber-500">
+                    {selectedUserProfile.points.toLocaleString()} <span className="text-base text-muted-foreground font-medium">pts</span>
+                  </p>
+                  <p className="text-[10px] text-muted-foreground uppercase font-medium mt-2 bg-background/50 inline-block px-2 py-1 rounded-md border border-border/50">
+                    Basado en {selectedUserProfile.totalResolved} operaciones cerradas
                   </p>
                 </div>
               </div>
 
-              <Button asChild className="w-full mt-4" size="lg">
+              <Button asChild className="w-full mt-4 h-12 font-bold text-base" size="lg">
                 <Link href={`/profile/${selectedUserProfile.id}`}>
-                  Ver Perfil Completo
+                  Ver Portfolio Completo
                 </Link>
               </Button>
             </div>

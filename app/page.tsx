@@ -28,7 +28,7 @@ interface Market {
   end_date: string;
   trending?: "up" | "down";
   image_url?: string | null;
-  options?: MarketOption[]; // NUEVO: La lista de opciones (Alcaraz, Sinner, etc.)
+  options?: MarketOption[];
 }
 
 type SortOption = "trending" | "newest" | "volume";
@@ -104,7 +104,6 @@ export default function PredictionMarketDashboard() {
   const fetchMarkets = useCallback(async () => {
     setIsLoadingMarkets(true);
 
-    // NUEVO: Pedimos a Supabase que traiga los mercados Y sus opciones juntas
     const { data, error } = await supabase
       .from("markets")
       .select(`
@@ -124,7 +123,7 @@ export default function PredictionMarketDashboard() {
     } else if (data) {
       const marketsWithOptions = data.map((market: any) => ({
         ...market,
-        options: market.market_options || [], // Guardamos las opciones
+        options: market.market_options || [],
         trending: Math.random() > 0.6 ? ((Math.random() > 0.5 ? "up" : "down") as "up" | "down") : undefined,
       }));
       setMarkets(marketsWithOptions);
@@ -178,35 +177,40 @@ export default function PredictionMarketDashboard() {
     <div className="min-h-screen bg-background">
       <NavHeader points={userPoints} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode(!isDarkMode)} onPointsUpdate={handlePointsUpdate} userId={user?.id ?? null} userEmail={user?.email ?? null} onOpenAuthModal={() => setIsAuthModalOpen(true)} onSignOut={handleSignOut} isAdmin={userRole === "admin"} username={username} />
 
-      <main className="container mx-auto px-4 py-8">
-        <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <main className="container mx-auto px-4 py-6 md:py-8">
+        <div className="mb-6 md:mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
-            <h1 className="text-3xl md:text-4xl font-bold mb-2 text-balance">
+            <h1 className="text-3xl md:text-4xl font-bold mb-1 md:mb-2 text-balance">
               Mercado de <span className="text-primary">Predicciones</span>
             </h1>
-            <p className="text-muted-foreground text-lg">Predecí el futuro y ganá puntos apostando a tus convicciones</p>
+            <p className="text-muted-foreground text-sm md:text-lg">Predecí el futuro y ganá puntos apostando a tus convicciones</p>
           </div>
-          <Button onClick={() => user ? setIsCreateModalOpen(true) : setIsAuthModalOpen(true)} className="shrink-0"><Plus className="w-4 h-4 mr-2" /> Crear Mercado</Button>
+          {/* Ocultamos el botón gigante en mobile, solo se ve en pantallas medianas/grandes */}
+          <Button onClick={() => user ? setIsCreateModalOpen(true) : setIsAuthModalOpen(true)} className="hidden md:flex shrink-0"><Plus className="w-4 h-4 mr-2" /> Crear Mercado</Button>
         </div>
 
-        <div className="space-y-4 mb-8">
-          <div className="flex flex-col sm:flex-row gap-4">
+        <div className="space-y-4 mb-6 md:mb-8">
+          <div className="flex flex-col md:flex-row gap-3 md:gap-4">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-              <Input placeholder="Buscar mercados..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10 bg-card border-border/50" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 md:w-5 md:h-5 text-muted-foreground" />
+              <Input placeholder="Buscar mercados..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 md:pl-10 bg-card border-border/50 h-10 md:h-11" />
             </div>
 
-            <div className="flex gap-2">
-              <Button variant={sortBy === "trending" ? "default" : "outline"} size="sm" onClick={() => setSortBy("trending")} className={cn(sortBy !== "trending" && "border-border/50")}><Flame className="w-4 h-4 mr-1.5" /> Popular</Button>
-              <Button variant={sortBy === "newest" ? "default" : "outline"} size="sm" onClick={() => setSortBy("newest")} className={cn(sortBy !== "newest" && "border-border/50")}><Clock className="w-4 h-4 mr-1.5" /> Recientes</Button>
-              <Button variant={sortBy === "volume" ? "default" : "outline"} size="sm" onClick={() => setSortBy("volume")} className={cn(sortBy !== "volume" && "border-border/50")}><TrendingUp className="w-4 h-4 mr-1.5" /> Volumen</Button>
+            {/* Filtros de orden (Popular, Recientes, etc) con Scroll Horizontal ocultando barra */}
+            <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0 md:overflow-visible [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+              <Button variant={sortBy === "trending" ? "default" : "outline"} size="sm" onClick={() => setSortBy("trending")} className={cn("whitespace-nowrap shrink-0 h-9", sortBy !== "trending" && "border-border/50")}><Flame className="w-4 h-4 mr-1.5" /> Popular</Button>
+              <Button variant={sortBy === "newest" ? "default" : "outline"} size="sm" onClick={() => setSortBy("newest")} className={cn("whitespace-nowrap shrink-0 h-9", sortBy !== "newest" && "border-border/50")}><Clock className="w-4 h-4 mr-1.5" /> Recientes</Button>
+              <Button variant={sortBy === "volume" ? "default" : "outline"} size="sm" onClick={() => setSortBy("volume")} className={cn("whitespace-nowrap shrink-0 h-9", sortBy !== "volume" && "border-border/50")}><TrendingUp className="w-4 h-4 mr-1.5" /> Volumen</Button>
             </div>
           </div>
 
-          <CategoryFilter selectedCategory={selectedCategory} onSelectCategory={setSelectedCategory} />
+          {/* Categorías con Scroll Horizontal */}
+          <div className="overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0 md:overflow-visible [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+            <CategoryFilter selectedCategory={selectedCategory} onSelectCategory={setSelectedCategory} />
+          </div>
         </div>
 
-        <div className="mb-6 text-sm text-muted-foreground">
+        <div className="mb-4 text-xs md:text-sm text-muted-foreground">
           Mostrando <span className="font-medium text-foreground">{sortedMarkets.length}</span> mercados
           {selectedCategory !== "all" && <span> en <span className="font-medium text-primary capitalize">{selectedCategory}</span></span>}
         </div>
@@ -215,7 +219,7 @@ export default function PredictionMarketDashboard() {
           <div className="flex items-center justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
         ) : (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
               {sortedMarkets.map((market) => (
                 <MarketCard
                   key={market.id}
@@ -225,7 +229,7 @@ export default function PredictionMarketDashboard() {
                   totalVolume={Number(market.total_volume ?? 0).toLocaleString()}
                   endDate={formatDate(market.end_date)}
                   imageUrl={market.image_url}
-                  options={market.options || []} // NUEVO: Pasamos las opciones a la tarjeta
+                  options={market.options || []}
                   userId={user?.id ?? null}
                   userPoints={userPoints}
                   onBetPlaced={handlePointsUpdate}
@@ -235,10 +239,10 @@ export default function PredictionMarketDashboard() {
             </div>
 
             {sortedMarkets.length === 0 && (
-              <div className="text-center py-16">
+              <div className="text-center py-16 px-4">
                 <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center"><Search className="w-8 h-8 text-muted-foreground" /></div>
                 <h3 className="text-lg font-semibold mb-2">No se encontraron mercados</h3>
-                <p className="text-muted-foreground mb-4">Probá con otros filtros o creá tu propio mercado</p>
+                <p className="text-muted-foreground mb-4 text-sm">Probá con otros filtros o creá tu propio mercado</p>
                 <Button onClick={() => setIsCreateModalOpen(true)}><Plus className="w-4 h-4 mr-2" /> Crear Mercado</Button>
               </div>
             )}
@@ -246,7 +250,10 @@ export default function PredictionMarketDashboard() {
         )}
       </main>
 
-      <Button onClick={() => user ? setIsCreateModalOpen(true) : setIsAuthModalOpen(true)} className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 transition-all hover:scale-105" size="icon"><Plus className="w-6 h-6" /></Button>
+      {/* Botón flotante (+) solo visible en Mobile */}
+      <Button onClick={() => user ? setIsCreateModalOpen(true) : setIsAuthModalOpen(true)} className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 transition-all hover:scale-105 md:hidden z-40" size="icon">
+        <Plus className="w-6 h-6" />
+      </Button>
 
       <CreateMarketModal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} userId={user?.id ?? null} onMarketCreated={fetchMarkets} />
       <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} onAuthSuccess={handleAuthSuccess} isDarkMode={isDarkMode} />
