@@ -9,14 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { createClient } from "@/lib/supabase/client";
-import { Loader2, ArrowLeft, Clock, Coins, History, CheckCheck, X, User as UserIcon, MessageSquare, Reply, ChevronDown, ChevronUp, Trash2 } from "lucide-react";
+import { Loader2, ArrowLeft, Clock, Coins, History, CheckCheck, X, User as UserIcon, MessageSquare, Reply, ChevronDown, ChevronUp, Trash2, ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
@@ -31,7 +25,7 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
   
   const [market, setMarket] = useState<any>(null);
   const [options, setOptions] = useState<any[]>([]); 
-  const [bets, setBets] = useState<any[]>([]);
+  const [activityFeed, setActivityFeed] = useState<any[]>([]); 
   const [comments, setComments] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -54,7 +48,6 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
   const [isDeletingComment, setIsDeletingComment] = useState(false);
 
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-  const [isLoadingProfileStats, setIsLoadingProfileStats] = useState(false);
   const [selectedUserProfile, setSelectedUserProfile] = useState<any>(null);
 
   const fetchUserAndProfile = useCallback(async () => {
@@ -78,11 +71,7 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
     }
     setMarket(mData);
 
-    const { data: optionsData } = await supabase
-      .from("market_options")
-      .select("*")
-      .eq("market_id", marketId)
-      .order("created_at", { ascending: true });
+    const { data: optionsData } = await supabase.from("market_options").select("*").eq("market_id", marketId).order("created_at", { ascending: true });
     setOptions(optionsData || []);
 
     const { data: historyData } = await supabase.from("market_history").select("*").eq("market_id", marketId).order("created_at", { ascending: true });
@@ -92,24 +81,32 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
       no: 100 - h.yes_percentage,
     })) || [];
 
-    if (formattedHistory.length === 1) {
-      formattedHistory.push({ ...formattedHistory[0], time: "Ahora" });
-    }
+    if (formattedHistory.length === 1) formattedHistory.push({ ...formattedHistory[0], time: "Ahora" });
     setHistory(formattedHistory);
 
-    // RECUPERAMOS LAS APUESTAS
+    // RECUPERAMOS APUESTAS Y CASHOUTS JUNTOS
     const { data: betsData } = await supabase.from("bets").select("*").eq("market_id", marketId).order("created_at", { ascending: false });
-    if (betsData && betsData.length > 0) {
-      const userIds = [...new Set(betsData.map(b => b.user_id))];
+    const { data: cashoutsData } = await supabase.from("transactions").select("*").eq("market_id", marketId).eq("type", "cashout").order("created_at", { ascending: false });
+
+    const rawBets = betsData || [];
+    const rawCashouts = cashoutsData || [];
+    
+    // Obtenemos los nombres de usuario de todos
+    const userIds = [...new Set([...rawBets.map(b => b.user_id), ...rawCashouts.map(c => c.user_id)])];
+    const profileMap: Record<string, string> = {};
+    
+    if (userIds.length > 0) {
       const { data: profilesData } = await supabase.from("profiles").select("id, username").in("id", userIds);
-      const profileMap: Record<string, string> = {};
       if (profilesData) profilesData.forEach(p => { profileMap[p.id] = p.username || "Usuario Anónimo"; });
-      setBets(betsData.map(bet => ({ ...bet, profiles: { username: profileMap[bet.user_id] || "Usuario Anónimo" } })));
-    } else {
-      setBets([]);
     }
 
-    // RECUPERAMOS LOS COMENTARIOS
+    const mappedBets = rawBets.map(bet => ({ ...bet, activityType: 'bet', profiles: { username: profileMap[bet.user_id] || "Usuario Anónimo" } }));
+    const mappedCashouts = rawCashouts.map(c => ({ ...c, activityType: 'cashout', profiles: { username: profileMap[c.user_id] || "Usuario Anónimo" } }));
+
+    // Unimos todo y ordenamos por fecha
+    const combinedFeed = [...mappedBets, ...mappedCashouts].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    setActivityFeed(combinedFeed);
+
     const { data: commentsData } = await supabase.from("comments").select("*, profiles(username, avatar_url)").eq("market_id", marketId).order("created_at", { ascending: true }); 
     setComments(commentsData || []);
     
@@ -122,6 +119,7 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
 
     const channel = supabase.channel(`market-${marketId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "bets", filter: `market_id=eq.${marketId}` }, () => { fetchData(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "transactions", filter: `market_id=eq.${marketId}` }, () => { fetchData(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "comments", filter: `market_id=eq.${marketId}` }, () => { fetchData(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "market_history", filter: `market_id=eq.${marketId}` }, () => { fetchData(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "market_options", filter: `market_id=eq.${marketId}` }, () => { fetchData(); })
@@ -195,20 +193,15 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
     } catch (err: any) { toast({ title: "Error al borrar", description: err.message, variant: "destructive" }); } finally { setIsDeletingComment(false); }
   };
 
-  const openUserProfile = async (userId: string, username: string) => { /* Simplificado por espacio */ setIsProfileModalOpen(true); };
+  const openUserProfile = async (userId: string, username: string) => { setIsProfileModalOpen(true); };
   const toggleThread = (commentId: string) => { setExpandedThreads(prev => ({ ...prev, [commentId]: !prev[commentId] })); };
 
   if (isLoading) return <div className="min-h-screen bg-background flex justify-center items-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   if (!market) return null;
 
   const totalVotesMulti = options.reduce((sum, opt) => sum + Number(opt.total_votes), 0);
-  
-  // Condición para mostrar el gráfico histórico (Solo mercados Sí/No)
   const isBinary = options.length === 2 && options.some(o => o.option_name.toLowerCase().includes('s'));
 
-  // ==========================================
-  // BLOQUES RESTAURADOS: COMENTARIOS Y APUESTAS
-  // ==========================================
   const topLevelComments = comments.filter(c => !c.parent_id).reverse();
 
   const renderComment = (comment: any, isReply = false) => {
@@ -248,36 +241,55 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
 
   const UltimasApuestasBlock = (
     <div className="pt-8 border-t border-border/50 lg:pt-0 lg:border-t-0">
-      <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><History className="w-5 h-5 text-primary" /> Últimas Apuestas</h3>
+      <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><ActivityIcon /> Actividad del Mercado</h3>
       <div className="rounded-xl border border-border/50 bg-card overflow-hidden">
-        {bets.length === 0 ? (
-          <p className="text-center py-8 text-muted-foreground text-sm">Nadie ha apostado aún. ¡Sé el primero!</p>
+        {activityFeed.length === 0 ? (
+          <p className="text-center py-8 text-muted-foreground text-sm">Aún no hay actividad. ¡Sé el primero!</p>
         ) : (
           <div className="divide-y divide-border/50 max-h-[400px] overflow-y-auto">
-            {bets.map((bet) => {
-              // Buscamos el nombre de la opción (antes era yes/no, ahora es el ID)
-              const opt = options.find(o => o.id === bet.outcome);
-              const isOldBinary = bet.outcome === 'yes' || bet.outcome === 'no';
-              const displayOutcome = opt ? opt.option_name : (isOldBinary ? bet.outcome : 'Opción');
-              const optColor = opt ? opt.color : (bet.outcome === 'yes' ? '#0ea5e9' : '#ef4444');
+            {activityFeed.map((item) => {
+              if (item.activityType === 'bet') {
+                const opt = options.find(o => o.id === item.outcome);
+                const isOldBinary = item.outcome === 'yes' || item.outcome === 'no';
+                const displayOutcome = opt ? opt.option_name : (isOldBinary ? item.outcome : 'Opción');
+                const optColor = opt ? opt.color : (item.outcome === 'yes' ? '#0ea5e9' : '#ef4444');
 
-              return (
-                <div key={bet.id} className="flex items-center justify-between p-4 hover:bg-muted/30 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: `${optColor}30`, color: optColor }}>
-                      <CheckCheck className="w-4 h-4" />
+                return (
+                  <div key={`bet-${item.id}`} className="flex items-center justify-between p-4 hover:bg-muted/30 transition-colors">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: `${optColor}30`, color: optColor }}>
+                        <ArrowUpRight className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="font-medium text-sm">{item.profiles?.username || "Usuario"} apostó</span>
+                        <p className="text-xs text-muted-foreground block">{new Date(item.created_at).toLocaleTimeString()}</p>
+                      </div>
                     </div>
-                    <div>
-                      <span className="font-medium text-sm">{bet.profiles?.username || "Usuario Anónimo"}</span>
-                      <p className="text-xs text-muted-foreground block">{new Date(bet.created_at).toLocaleTimeString()}</p>
+                    <div className="text-right">
+                      <p className="font-bold text-foreground">{item.amount.toLocaleString()} pts</p>
+                      <p className="text-xs font-medium uppercase truncate w-24" style={{ color: optColor }}>{displayOutcome}</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-bold text-foreground">{bet.amount.toLocaleString()} pts</p>
-                    <p className="text-xs font-medium uppercase truncate w-20" style={{ color: optColor }}>{displayOutcome}</p>
+                );
+              } else {
+                return (
+                  <div key={`cashout-${item.id}`} className="flex items-center justify-between p-4 bg-muted/10 hover:bg-muted/30 transition-colors border-l-4 border-l-green-500">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-green-500/20 text-green-500">
+                        <ArrowDownRight className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="font-medium text-sm">{item.profiles?.username || "Usuario"} retiró ganancias</span>
+                        <p className="text-xs text-muted-foreground block">{new Date(item.created_at).toLocaleTimeString()}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-green-500">+{item.amount.toLocaleString()} pts</p>
+                      <p className="text-[10px] font-medium text-muted-foreground uppercase">Cashout</p>
+                    </div>
                   </div>
-                </div>
-              );
+                );
+              }
             })}
           </div>
         )}
@@ -372,7 +384,6 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
               </div>
             </div>
             
-            {/* RESTAURADOS LOS BLOQUES INFERIORES */}
             <div className="hidden lg:block mt-8">{DebateBlock}</div>
             <div className="hidden lg:block mt-8 pt-8 border-t border-border/50">{UltimasApuestasBlock}</div>
           </div>
@@ -400,6 +411,7 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
                 ))}
               </div>
 
+              {/* ¡ACÁ BORRAMOS LOS BOTONES DE SUGERENCIA DE +100, +500! */}
               <div className="space-y-4 mb-6">
                 <div>
                   <Label className="text-muted-foreground mb-1.5 block">Monto a invertir</Label>
@@ -414,12 +426,8 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
                     <span className="font-bold text-foreground">{(profile?.points || 0).toLocaleString()} pts</span>
                   </div>
                 )}
-                <div className="flex gap-2">
-                  {[100, 500, 1000].map((amount) => (
-                    <Button key={amount} type="button" variant="outline" size="sm" onClick={() => setBetAmount(amount.toString())} disabled={amount > (profile?.points || 0)} className="flex-1">+{amount}</Button>
-                  ))}
-                </div>
               </div>
+              
               <Button size="lg" className="w-full h-12 text-base font-bold bg-primary hover:bg-primary/90 text-primary-foreground" disabled={!selectedOptionId || !betAmount || isPlacingBet} onClick={handlePlaceBet}>
                 {isPlacingBet ? <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Procesando...</> : !user ? "Ingresar para Operar" : !selectedOptionId ? "Elegí una opción" : `Confirmar Inversión`}
               </Button>
@@ -433,5 +441,13 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
 
       <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} onAuthSuccess={() => { setIsAuthModalOpen(false); fetchUserAndProfile(); }} isDarkMode={isDarkMode} />
     </div>
+  );
+}
+
+function ActivityIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary">
+      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+    </svg>
   );
 }

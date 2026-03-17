@@ -12,6 +12,8 @@ import { createClient } from "@/lib/supabase/client";
 import { Loader2, ArrowLeft, User as UserIcon, Calendar, Trophy, Coins, History, CheckCircle2, Clock, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
+// NUEVO: Importamos la función para vender
+import { sellBet } from "@/lib/actions";
 
 interface ProfileClientProps {
   profileId: string;
@@ -28,7 +30,9 @@ export default function ProfileClient({ profileId }: ProfileClientProps) {
 
   const [viewedProfile, setViewedProfile] = useState<any>(null);
   const [userBets, setUserBets] = useState<any[]>([]);
+  const [marketOptions, setMarketOptions] = useState<any[]>([]); // NUEVO: Para saber colores y votos
   const [isLoading, setIsLoading] = useState(true);
+  const [sellingBetId, setSellingBetId] = useState<string | null>(null); // NUEVO: Estado del botón vender
 
   const fetchAuth = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -40,7 +44,6 @@ export default function ProfileClient({ profileId }: ProfileClientProps) {
   }, [supabase]);
 
   const fetchViewedProfileData = useCallback(async () => {
-    // ACÁ ESTÁ EL CAMBIO 1: Agregamos avatar_url al select
     const { data: profileData, error: profileError } = await supabase
       .from("profiles")
       .select("id, username, points, avatar_url") 
@@ -55,17 +58,18 @@ export default function ProfileClient({ profileId }: ProfileClientProps) {
     }
     setViewedProfile(profileData);
 
+    // NUEVO: Agregamos total_volume para poder calcular el precio de venta
     const { data: betsData, error: betsError } = await supabase
       .from("bets")
-      .select("*, markets(title, category, status, winning_outcome)")
+      .select("*, markets(title, category, status, winning_outcome, total_volume)")
       .eq("user_id", profileId)
       .order("created_at", { ascending: false });
 
-    if (betsError) {
-      console.error("Error cargando apuestas:", betsError);
-    }
+    // NUEVO: Traemos todas las opciones para poder pintar los colores y nombres
+    const { data: optionsData } = await supabase.from("market_options").select("*");
 
     setUserBets(betsData || []);
+    setMarketOptions(optionsData || []);
     setIsLoading(false);
   }, [profileId, router, supabase]);
 
@@ -79,6 +83,25 @@ export default function ProfileClient({ profileId }: ProfileClientProps) {
     else document.documentElement.classList.remove("dark");
   }, [isDarkMode]);
 
+  // NUEVO: Función que ejecuta la venta
+  const handleSell = async (betId: string, e: React.MouseEvent) => {
+    e.preventDefault(); // Evita que se abra el link del mercado
+    e.stopPropagation();
+
+    setSellingBetId(betId);
+    const { ok, error, cashoutValue } = await sellBet(betId);
+    
+    if (!ok) {
+      toast({ title: "Error al vender", description: error || "Hubo un problema", variant: "destructive" });
+      setSellingBetId(null);
+    } else {
+      toast({ title: "¡Venta exitosa!", description: `Tus ganancias de ${cashoutValue?.toLocaleString()} pts ya están en tu cuenta.` });
+      fetchAuth();
+      fetchViewedProfileData();
+      setSellingBetId(null);
+    }
+  };
+
   if (isLoading) return <div className="min-h-screen bg-background flex justify-center items-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   if (!viewedProfile) return null;
 
@@ -87,18 +110,7 @@ export default function ProfileClient({ profileId }: ProfileClientProps) {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <NavHeader
-        points={myProfile?.points ?? 10000}
-        isDarkMode={isDarkMode}
-        onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
-        onPointsUpdate={() => fetchAuth()}
-        userId={currentUser?.id ?? null}
-        userEmail={currentUser?.email ?? null}
-        onOpenAuthModal={() => setIsAuthModalOpen(true)}
-        onSignOut={async () => { await supabase.auth.signOut(); router.push("/"); }}
-        isAdmin={myProfile?.role === "admin"}
-        username={myProfile?.username}
-      />
+      <NavHeader points={myProfile?.points ?? 10000} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode(!isDarkMode)} onPointsUpdate={() => fetchAuth()} userId={currentUser?.id ?? null} userEmail={currentUser?.email ?? null} onOpenAuthModal={() => setIsAuthModalOpen(true)} onSignOut={async () => { await supabase.auth.signOut(); router.push("/"); }} isAdmin={myProfile?.role === "admin"} username={myProfile?.username} />
 
       <main className="container mx-auto px-4 py-8 flex-1 max-w-5xl">
         <Button variant="ghost" size="sm" asChild className="mb-6 -ml-2 text-muted-foreground hover:text-foreground">
@@ -109,7 +121,6 @@ export default function ProfileClient({ profileId }: ProfileClientProps) {
         <div className="bg-card border border-border/50 rounded-2xl p-6 sm:p-8 mb-8 shadow-sm flex flex-col sm:flex-row items-center sm:items-start gap-6 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
           
-          {/* ACÁ ESTÁ EL CAMBIO 2: Mostramos la foto si existe */}
           <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-full bg-primary/10 border-4 border-background shadow-lg flex items-center justify-center shrink-0 relative z-10 overflow-hidden">
             {viewedProfile.avatar_url ? (
               <img src={viewedProfile.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
@@ -143,7 +154,7 @@ export default function ProfileClient({ profileId }: ProfileClientProps) {
           </div>
         </div>
 
-        {/* HISTORIAL DE APUESTAS PÚBLICO */}
+        {/* HISTORIAL DE APUESTAS */}
         <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
           <History className="w-6 h-6 text-primary" /> Historial de Predicciones
         </h2>
@@ -163,6 +174,27 @@ export default function ProfileClient({ profileId }: ProfileClientProps) {
                   const isResolved = market?.status === 'resolved';
                   const won = isResolved && market?.winning_outcome === bet.outcome;
                   const lost = isResolved && market?.winning_outcome !== bet.outcome;
+
+                  // Lógica para detectar opciones múltiples vs apuestas viejas
+                  const opt = marketOptions.find(o => o.id === bet.outcome);
+                  const isOldBinary = bet.outcome === 'yes' || bet.outcome === 'no';
+                  const displayOutcome = opt ? opt.option_name : (isOldBinary ? (bet.outcome === 'yes' ? 'SÍ' : 'NO') : 'Opción');
+                  const optColor = opt ? opt.color : (bet.outcome === 'yes' ? '#0ea5e9' : '#ef4444');
+
+                  // MATEMÁTICA DE CASHOUT EN TIEMPO REAL
+                  let cashoutValue = 0;
+                  let canSell = false;
+                  // Solo permitimos vender si el mercado está activo, si sos el dueño, y si es una apuesta nueva (con UUID)
+                  if (isMe && !isResolved && opt) {
+                      canSell = true;
+                      const totalVotes = Number(opt.total_votes);
+                      const totalVol = Number(market?.total_volume || 0);
+                      let currVal = bet.amount;
+                      if (totalVotes > 0) {
+                          currVal = (bet.amount / totalVotes) * totalVol;
+                      }
+                      cashoutValue = Math.round(currVal * 0.95); // 5% de penalidad
+                  }
 
                   return (
                     <Link href={`/market/${bet.market_id}`} key={bet.id} className="block p-5 sm:p-6 hover:bg-muted/30 transition-colors group">
@@ -190,20 +222,31 @@ export default function ProfileClient({ profileId }: ProfileClientProps) {
                           </div>
 
                           <div className="flex flex-col min-w-[80px]">
-                            <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1">Posición</p>
-                            <div className={cn(
-                              "inline-flex items-center justify-center px-3 py-1 rounded-md text-sm font-bold w-fit",
-                              bet.outcome === 'yes' ? "bg-primary/10 text-primary border border-primary/20" : "bg-red-500/10 text-red-500 border border-red-500/20"
-                            )}>
-                              {bet.outcome === 'yes' ? 'SÍ' : 'NO'}
+                            <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1">Predicción</p>
+                            <div className="inline-flex items-center justify-center px-3 py-1 rounded-md text-sm font-bold w-fit border" style={{ backgroundColor: `${optColor}15`, color: optColor, borderColor: `${optColor}30` }}>
+                              {displayOutcome}
                             </div>
                           </div>
 
                           <div className="flex flex-col min-w-[100px] sm:items-end w-full sm:w-auto mt-2 sm:mt-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border/50">
                             <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1 hidden sm:block">Estado</p>
-                            <div className="w-full sm:w-auto">
+                            <div className="w-full sm:w-auto flex items-center justify-end gap-2">
                               {!isResolved ? (
-                                <Badge variant="secondary" className="bg-amber-500/10 text-amber-500 w-full sm:w-auto justify-center sm:justify-end text-xs py-1">En Juego</Badge>
+                                <>
+                                  {/* EL BOTÓN MÁGICO DE VENDER */}
+                                  {canSell && (
+                                    <Button
+                                      onClick={(e) => handleSell(bet.id, e)}
+                                      disabled={sellingBetId === bet.id}
+                                      size="sm"
+                                      className="bg-green-500 hover:bg-green-600 text-white h-7 text-xs px-3 shadow-md shadow-green-500/20"
+                                    >
+                                      {sellingBetId === bet.id ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Coins className="w-3 h-3 mr-1" />}
+                                      Vender ({cashoutValue.toLocaleString()})
+                                    </Button>
+                                  )}
+                                  <Badge variant="secondary" className="bg-amber-500/10 text-amber-500 justify-center text-xs py-1">En Juego</Badge>
+                                </>
                               ) : won ? (
                                 <Badge variant="default" className="bg-green-500 hover:bg-green-600 w-full sm:w-auto justify-center sm:justify-end gap-1.5 text-xs py-1"><CheckCircle2 className="w-3.5 h-3.5" /> ¡Ganó!</Badge>
                               ) : lost ? (

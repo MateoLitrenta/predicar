@@ -39,8 +39,21 @@ export type BetWithMarket = {
   amount: number;
   outcome: string;
   created_at?: string;
-  markets?: { id: string; title: string; status: string; end_date?: string; winning_outcome?: string | null } | null;
-  market?: { id: string; title: string; status: string; end_date?: string; winning_outcome?: string | null } | null;
+  markets?: { 
+    id: string; 
+    title: string; 
+    status: string; 
+    end_date?: string; 
+    winning_outcome?: string | null;
+    total_volume?: number; 
+  } | null;
+  market?: { id: string; title: string; status: string; end_date?: string; winning_outcome?: string | null; total_volume?: number; } | null;
+  // NUEVO: Agregamos la información de la opción para la billetera
+  option_details?: {
+    option_name: string;
+    color: string;
+    total_votes: number;
+  } | null;
 };
 
 export async function getMyBets(): Promise<{ data: BetWithMarket[] | null; error: string | null }> {
@@ -50,14 +63,41 @@ export async function getMyBets(): Promise<{ data: BetWithMarket[] | null; error
   } = await supabase.auth.getUser();
   if (!user) return { data: null, error: "No autenticado" };
 
-  const { data, error } = await supabase
+  // 1. Traemos las apuestas y los mercados
+  const { data: betsData, error } = await supabase
     .from("bets")
     .select("*, markets(*)")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
 
   if (error) return { data: null, error: error.message };
-  return { data: (data ?? []) as BetWithMarket[], error: null };
+
+  if (!betsData || betsData.length === 0) return { data: [], error: null };
+
+  // 2. Traemos TODAS las opciones para poder "pegarle" el nombre a la apuesta
+  const { data: optionsData } = await supabase
+    .from("market_options")
+    .select("id, option_name, color, total_votes");
+
+  // 3. Unimos la información
+  const enrichedBets = betsData.map((bet: any) => {
+    // Si la apuesta es vieja ('yes' o 'no'), le armamos un detalle falso para que no rompa
+    if (bet.outcome === 'yes') {
+      return { ...bet, option_details: { option_name: 'Sí', color: '#0ea5e9', total_votes: bet.amount } };
+    }
+    if (bet.outcome === 'no') {
+      return { ...bet, option_details: { option_name: 'No', color: '#ef4444', total_votes: bet.amount } };
+    }
+
+    // Si es nueva, buscamos el ID
+    const opt = optionsData?.find(o => o.id === bet.outcome);
+    return {
+      ...bet,
+      option_details: opt ? { option_name: opt.option_name, color: opt.color, total_votes: opt.total_votes } : null
+    };
+  });
+
+  return { data: enrichedBets as BetWithMarket[], error: null };
 }
 
 export async function getAdminMarkets() {
@@ -138,7 +178,7 @@ export async function createMarket(params: {
   category: string;
   end_date: string;
   created_by: string;
-  options?: string[]; // <--- ACEPTA LAS OPCIONES INFINITAS
+  options?: string[];
 }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -151,7 +191,6 @@ export async function createMarket(params: {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
 
-  // 1. Insertamos el mercado principal y pedimos que nos devuelva el ID
   const { data: marketData, error: marketError } = await supabase.from("markets").insert({
     title: params.title,
     description: params.description || null,
@@ -167,19 +206,17 @@ export async function createMarket(params: {
 
   if (marketError) return { ok: false, error: marketError.message };
 
-  // 2. Insertamos las opciones en la nueva tabla (market_options)
   if (params.options && params.options.length > 0) {
     const colors = ['#0ea5e9', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
     
     const optionsToInsert = params.options.map((opt, index) => ({
       market_id: marketData.id,
       option_name: opt,
-      color: colors[index % colors.length], // Rota entre los colores
+      color: colors[index % colors.length],
       total_votes: 0
     }));
     await supabase.from("market_options").insert(optionsToInsert);
   } else {
-    // Si no mandan opciones, ponemos Sí/No por defecto
     await supabase.from("market_options").insert([
       { market_id: marketData.id, option_name: 'Sí', color: '#0ea5e9', total_votes: 0 },
       { market_id: marketData.id, option_name: 'No', color: '#ef4444', total_votes: 0 }
@@ -196,7 +233,7 @@ export async function createAdminMarket(params: {
   category: string;
   end_date: string;
   image_url?: string | null;
-  options?: string[]; // <--- ACEPTA LAS OPCIONES INFINITAS
+  options?: string[];
 }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -218,7 +255,6 @@ export async function createAdminMarket(params: {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
 
-  // 1. Insertamos el mercado activo y traemos el ID
   const { data: marketData, error: marketError } = await supabase.from("markets").insert({
     title: params.title,
     description: params.description || null,
@@ -235,7 +271,6 @@ export async function createAdminMarket(params: {
 
   if (marketError) return { ok: false, error: marketError.message };
 
-  // 2. Guardamos las opciones en la nueva tabla
   if (params.options && params.options.length > 0) {
     const colors = ['#0ea5e9', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
     
@@ -247,7 +282,6 @@ export async function createAdminMarket(params: {
     }));
     await supabase.from("market_options").insert(optionsToInsert);
   } else {
-    // Si el Admin no manda opciones, asume Sí/No
     await supabase.from("market_options").insert([
       { market_id: marketData.id, option_name: 'Sí', color: '#0ea5e9', total_votes: 0 },
       { market_id: marketData.id, option_name: 'No', color: '#ef4444', total_votes: 0 }
@@ -388,4 +422,23 @@ export async function updateProfileSettings(username: string, avatar_url: string
   const { error } = await supabase.from("profiles").update({ username, avatar_url }).eq("id", user.id);
   if (error) return { ok: false, error: error.message };
   return { ok: true };
+}
+
+// --- NUEVA FUNCIÓN: CASHOUT (VENDER APUESTA) ---
+export async function sellBet(betId: string): Promise<{ ok: boolean; error: string | null; cashoutValue?: number }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) return { ok: false, error: "No autenticado" };
+
+  // Llamamos a la función de la base de datos que creamos recién
+  const { data: cashoutValue, error } = await supabase.rpc("vender_apuesta", {
+    p_bet_id: betId
+  });
+
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+
+  return { ok: true, error: null, cashoutValue };
 }
