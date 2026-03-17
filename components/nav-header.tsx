@@ -33,7 +33,8 @@ import {
   ShieldCheck,
   CheckCheck,
   Trophy,
-  Trash2
+  Trash2,
+  MessageSquare
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
@@ -53,11 +54,17 @@ interface NavHeaderProps {
   username?: string | null;
 }
 
+// Actualizamos la interfaz para soportar los nuevos campos
 interface AppNotification {
   id: string;
-  message: string;
+  message?: string; // Para las notificaciones viejas
+  type?: string;    // Para saber si es 'reply'
+  sender_id?: string;
+  market_id?: string;
   is_read: boolean;
   created_at: string;
+  markets?: { title: string };
+  senderProfile?: { username: string; avatar_url: string };
 }
 
 export function NavHeader({
@@ -84,18 +91,31 @@ export function NavHeader({
   useEffect(() => {
     if (!userId) return;
     const supabase = createClient();
+    
     const fetchNotifications = async () => {
       const { data, error } = await supabase
         .from("notifications")
-        .select("*")
+        .select("*, markets(title)")
         .eq("user_id", userId)
         .order("created_at", { ascending: false })
         .limit(10);
+        
       if (data && !error) {
-        setNotifications(data);
-        setUnreadCount(data.filter((n) => !n.is_read).length);
+        // Buscamos los perfiles de los que nos respondieron
+        const senderIds = [...new Set(data.map(n => n.sender_id).filter(Boolean))];
+        const profMap: Record<string, any> = {};
+        
+        if (senderIds.length > 0) {
+          const { data: profiles } = await supabase.from("profiles").select("id, username, avatar_url").in("id", senderIds);
+          profiles?.forEach(p => profMap[p.id] = p);
+        }
+
+        const enriched = data.map(n => ({ ...n, senderProfile: profMap[n.sender_id] }));
+        setNotifications(enriched);
+        setUnreadCount(enriched.filter((n) => !n.is_read).length);
       }
     };
+    
     fetchNotifications();
     
     const channel = supabase
@@ -103,19 +123,18 @@ export function NavHeader({
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
-        (payload) => {
-          const newNotif = payload.new as AppNotification;
-          setNotifications((prev) => [newNotif, ...prev].slice(0, 10));
-          setUnreadCount((prev) => prev + 1);
+        () => {
+          // Si hay una nueva, recargamos para traer los nombres y fotos
+          fetchNotifications();
           toast({
             title: "¡Nueva notificación!",
-            description: newNotif.message,
-            className: newNotif.message.includes("Ganaste") ? "border-green-500 bg-green-500/10" : "",
+            description: "Alguien interactuó con vos en PredicAR.",
           });
           router.refresh(); 
         }
       )
       .subscribe();
+      
     return () => { supabase.removeChannel(channel); };
   }, [userId, router]);
 
@@ -168,13 +187,18 @@ export function NavHeader({
     e.preventDefault();
     e.stopPropagation(); 
     
-    // Lo borramos de la pantalla al instante
     setNotifications((prev) => prev.filter((n) => n.id !== id));
     
-    // Le avisamos a la base de datos (usando el contrato inteligente)
     const { ok, error } = await deleteNotification(id);
     if (!ok) {
       toast({ title: "Error", description: "No se pudo borrar la notificación", variant: "destructive" });
+    }
+  };
+
+  const handleNotificationClick = (notif: AppNotification) => {
+    // Si la notificación tiene un mercado asociado, navegamos ahí
+    if (notif.market_id) {
+      router.push(`/market/${notif.market_id}`);
     }
   };
 
@@ -189,45 +213,66 @@ export function NavHeader({
         )}
       </div>
       
-      {/* Ocultamos la barra de scroll y evitamos desbordes */}
       <div className="overflow-y-auto overflow-x-hidden p-2 flex-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
         {notifications.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-6">No tenés notificaciones recientes</p>
         ) : (
           <div className="flex flex-col gap-2">
-            {notifications.map((notif) => (
-              <div 
-                key={notif.id} 
-                className={cn(
-                  "relative group p-3 pr-10 rounded-md text-sm transition-colors w-full", 
-                  notif.is_read ? "bg-muted/30" : "bg-primary/10 border border-primary/20"
-                )}
-              >
-                <div className="flex gap-3">
-                  {/* Ícono */}
-                  <div className="mt-0.5 shrink-0">
-                    {notif.message.includes("Ganaste") ? <CheckCheck className="w-4 h-4 text-green-500" /> : <X className="w-4 h-4 text-red-500" />}
+            {notifications.map((notif) => {
+              const isReply = notif.type === 'reply' || !!notif.sender_id;
+
+              return (
+                <div 
+                  key={notif.id} 
+                  onClick={() => handleNotificationClick(notif)}
+                  className={cn(
+                    "relative group p-3 pr-10 rounded-md text-sm transition-colors w-full cursor-pointer hover:bg-muted/50", 
+                    notif.is_read ? "bg-muted/30" : "bg-primary/10 border border-primary/20"
+                  )}
+                >
+                  <div className="flex gap-3">
+                    {/* Ícono o Avatar */}
+                    <div className="mt-0.5 shrink-0">
+                      {isReply ? (
+                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center border border-primary/20 overflow-hidden">
+                          {notif.senderProfile?.avatar_url ? (
+                            <img src={notif.senderProfile.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+                          ) : (
+                            <User className="w-4 h-4 text-primary" />
+                          )}
+                        </div>
+                      ) : (
+                        notif.message?.includes("Ganaste") ? <CheckCheck className="w-4 h-4 text-green-500" /> : <X className="w-4 h-4 text-red-500" />
+                      )}
+                    </div>
+                    
+                    {/* Texto */}
+                    <div className="flex-1 min-w-0">
+                      {isReply ? (
+                        <p className="text-foreground leading-snug whitespace-pre-wrap break-words">
+                          <span className="font-bold">{notif.senderProfile?.username || "Alguien"}</span> te respondió en{" "}
+                          <span className="font-medium text-primary">"{notif.markets?.title || 'un mercado'}"</span>
+                        </p>
+                      ) : (
+                        <p className="text-foreground leading-snug whitespace-pre-wrap break-words">{notif.message}</p>
+                      )}
+                      <p className="text-xs text-muted-foreground mt-1.5">
+                        {new Date(notif.created_at).toLocaleDateString("es-AR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                    </div>
                   </div>
                   
-                  {/* Texto */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-foreground leading-snug whitespace-pre-wrap break-words">{notif.message}</p>
-                    <p className="text-xs text-muted-foreground mt-1.5">
-                      {new Date(notif.created_at).toLocaleDateString("es-AR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
-                    </p>
-                  </div>
+                  {/* Botón Tachito */}
+                  <button
+                    onClick={(e) => handleDeleteNotification(e, notif.id)}
+                    className="absolute top-2 right-2 p-1.5 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-red-500 hover:bg-red-500/10 rounded-md transition-all"
+                    title="Eliminar notificación"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
-                
-                {/* Botón Tachito */}
-                <button
-                  onClick={(e) => handleDeleteNotification(e, notif.id)}
-                  className="absolute top-2 right-2 p-1.5 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-red-500 hover:bg-red-500/10 rounded-md transition-all"
-                  title="Eliminar notificación"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -246,7 +291,6 @@ export function NavHeader({
           </Link>
 
           <div className="hidden md:flex items-center gap-3">
-            {/* FIX: Ocultar el pill de puntos si no hay usuario (Desktop) */}
             {userId && (
               <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-secondary/20 border border-secondary/30">
                 <Coins className="w-5 h-5 text-secondary-foreground" />
@@ -326,7 +370,6 @@ export function NavHeader({
           </div>
 
           <div className="md:hidden flex items-center gap-2">
-            {/* FIX: Ocultar el pill de puntos si no hay usuario (Mobile) */}
             {userId && (
               <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/20">
                 <Coins className="w-4 h-4 text-secondary-foreground" />
