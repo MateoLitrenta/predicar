@@ -424,15 +424,15 @@ export async function updateProfileSettings(username: string, avatar_url: string
   return { ok: true };
 }
 
-// --- NUEVA FUNCIÓN: CASHOUT (VENDER APUESTA) ---
+// --- NUEVA FUNCIÓN: CASHOUT (VENDER APUESTA CON ACCIONES) ---
 export async function sellBet(betId: string): Promise<{ ok: boolean; error: string | null; cashoutValue?: number }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   
   if (!user) return { ok: false, error: "No autenticado" };
 
-  // Llamamos a la función de la base de datos que creamos recién
-  const { data: cashoutValue, error } = await supabase.rpc("vender_apuesta", {
+  // Llamamos al robot financiero AMM que creamos en Supabase
+  const { data: cashoutValue, error } = await supabase.rpc("realizar_cashout", {
     p_bet_id: betId
   });
 

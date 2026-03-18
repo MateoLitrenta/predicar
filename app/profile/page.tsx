@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Coins, User, ArrowLeft, Loader2, TrendingUp, TrendingDown, History, Pencil, Landmark, Lock, Camera, CheckCircle2, Clock, XCircle } from "lucide-react";
+import { Coins, User, ArrowLeft, Loader2, TrendingUp, TrendingDown, History, Pencil, Landmark, Lock, Camera, CheckCircle2, Clock, XCircle, LineChart } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -44,8 +44,7 @@ export default function ProfilePage() {
 
   const [sellingBetId, setSellingBetId] = useState<string | null>(null);
   
-  // NUEVO ESTADO: Para el modal de vender
-  const [betToSell, setBetToSell] = useState<{ id: string, title: string, outcomeName: string, cashoutValue: number } | null>(null);
+  const [betToSell, setBetToSell] = useState<{ id: string, title: string, outcomeName: string, cashoutValue: number, pnl: number, pnlPercentage: number } | null>(null);
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [newUsername, setNewUsername] = useState("");
@@ -104,7 +103,6 @@ export default function ProfilePage() {
     else document.documentElement.classList.remove("dark");
   }, [isDarkMode]);
 
-  // NUEVA FUNCIÓN: Ahora llama al modal en vez de vender directo
   const confirmSell = async () => {
     if (!betToSell) return;
 
@@ -119,7 +117,7 @@ export default function ProfilePage() {
       await fetchUserData();
     }
     setSellingBetId(null);
-    setBetToSell(null); // Cierra el modal
+    setBetToSell(null); 
   };
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -204,7 +202,7 @@ export default function ProfilePage() {
           <Card className="bg-card border-border/50 shadow-md">
             <CardHeader>
               <CardTitle className="flex items-center justify-between text-xl">
-                <div className="flex items-center gap-2"><User className="w-5 h-5 text-primary" /> Mi Perfil</div>
+                <div className="flex items-center gap-2"><User className="w-5 h-5 text-primary" /> Mi Portfolio</div>
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" onClick={() => setIsPasswordModalOpen(true)} title="Cambiar Contraseña"><Lock className="w-4 h-4" /></Button>
                   <Button variant="outline" size="sm" onClick={() => { setNewUsername(profile.username || ""); setPreviewUrl(profile.avatar_url || null); setSelectedImage(null); setIsEditModalOpen(true); }}><Pencil className="w-4 h-4 mr-2" /> Editar</Button>
@@ -217,7 +215,7 @@ export default function ProfilePage() {
                   {profile.avatar_url ? <img src={profile.avatar_url} alt="Avatar" className="w-full h-full object-cover" /> : <User className="w-10 h-10" />}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm text-muted-foreground">Usuario</p>
+                  <p className="text-sm text-muted-foreground">Trader</p>
                   <p className="text-2xl font-bold text-foreground truncate">{displayName}</p>
                   {profile.email && <p className="text-sm text-muted-foreground mt-0.5 truncate">{profile.email}</p>}
                 </div>
@@ -226,7 +224,7 @@ export default function ProfilePage() {
               <div className="flex items-center gap-3 p-4 rounded-xl bg-secondary/20 border border-secondary/30">
                 <Coins className="w-10 h-10 text-amber-500 drop-shadow-md" />
                 <div>
-                  <p className="text-sm text-muted-foreground">Saldo Disponible</p>
+                  <p className="text-sm text-muted-foreground">Capital Disponible</p>
                   <p className="text-3xl font-bold text-foreground">
                     {(profile.points ?? 0).toLocaleString()} <span className="text-lg text-muted-foreground font-medium">pts</span>
                   </p>
@@ -245,7 +243,7 @@ export default function ProfilePage() {
             <CardContent className="p-4 sm:p-6">
               <Tabs defaultValue="active" className="w-full">
                 <TabsList className="grid w-full grid-cols-3 h-12 mb-6">
-                  <TabsTrigger value="active" className="flex items-center gap-1.5 text-xs sm:text-sm"><TrendingUp className="w-4 h-4" /><span className="hidden sm:inline">Activas</span></TabsTrigger>
+                  <TabsTrigger value="active" className="flex items-center gap-1.5 text-xs sm:text-sm"><LineChart className="w-4 h-4" /><span className="hidden sm:inline">Activas</span></TabsTrigger>
                   <TabsTrigger value="finished" className="flex items-center gap-1.5 text-xs sm:text-sm"><History className="w-4 h-4" /><span className="hidden sm:inline">Finalizadas</span></TabsTrigger>
                   <TabsTrigger value="bank" className="flex items-center gap-1.5 text-xs sm:text-sm"><Landmark className="w-4 h-4" /><span className="hidden sm:inline">Movimientos</span></TabsTrigger>
                 </TabsList>
@@ -254,7 +252,7 @@ export default function ProfilePage() {
                   {isLoadingBets ? (
                     <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
                   ) : bets.filter((b) => getMarket(b) && ACTIVE_STATUSES.includes(String(getMarket(b)!.status).toLowerCase())).length === 0 ? (
-                    <p className="py-8 text-center text-sm text-muted-foreground">No tenés apuestas activas en este momento.</p>
+                    <p className="py-8 text-center text-sm text-muted-foreground">No tenés inversiones activas en este momento.</p>
                   ) : (
                     bets
                       .filter((b) => getMarket(b) && ACTIVE_STATUSES.includes(String(getMarket(b)!.status).toLowerCase()))
@@ -267,21 +265,39 @@ export default function ProfilePage() {
 
                         let cashoutValue = 0;
                         let canSell = false;
+                        let currentPrice = 0;
+                        let pnl = 0;
+                        let pnlPercentage = 0;
                         
                         if (market) {
                           canSell = true;
                           const totalVol = Number(market.total_volume || 0);
-                          let currVal = bet.amount;
+                          const shares = Number((bet as any).shares || 0);
 
-                          if (opt && bet.outcome.length > 10) {
-                            const totalVotes = Number(opt.total_votes);
-                            if (totalVotes > 0) currVal = (bet.amount / totalVotes) * totalVol;
-                          } else if (isOldBinary) {
-                            const totalVotes = bet.outcome === "yes" ? Number(market.yes_votes || 0) : Number(market.no_votes || 0);
-                            if (totalVotes > 0) currVal = (bet.amount / totalVotes) * totalVol;
+                          // LA MAGIA: Si tiene acciones, usa el nuevo sistema AMM de Polymarket
+                          if (shares > 0) {
+                            const optionVotes = Number(opt?.total_votes || 0);
+                            const totalOptions = (market as any).market_options?.length || 2;
+                            currentPrice = (optionVotes + 100.0) / (totalVol + (totalOptions * 100.0));
+                            if (currentPrice < 0.01) currentPrice = 0.01;
+                            if (currentPrice > 0.99) currentPrice = 0.99;
+                            
+                            cashoutValue = Math.round(shares * currentPrice);
+                          } else {
+                            // Sistema Viejo (Fallback)
+                            let currVal = bet.amount;
+                            if (opt && bet.outcome.length > 10) {
+                              const totalVotes = Number(opt.total_votes);
+                              if (totalVotes > 0) currVal = (bet.amount / totalVotes) * totalVol;
+                            } else if (isOldBinary) {
+                              const totalVotes = bet.outcome === "yes" ? Number((market as any).yes_votes || 0) : Number((market as any).no_votes || 0);
+                              if (totalVotes > 0) currVal = (bet.amount / totalVotes) * totalVol;
+                            }
+                            cashoutValue = Math.round(currVal * 0.95); // 5% fee en el viejo
                           }
 
-                          cashoutValue = Math.round(currVal * 0.95);
+                          pnl = cashoutValue - bet.amount;
+                          pnlPercentage = (pnl / bet.amount) * 100;
                         }
 
                         return (
@@ -297,7 +313,7 @@ export default function ProfilePage() {
                                   <div className="flex flex-col">
                                     <p className="text-[10px] text-muted-foreground font-bold uppercase mb-1">Inversión</p>
                                     <p className="font-bold text-foreground flex items-center gap-1 text-sm">
-                                      <Coins className="w-3.5 h-3.5 text-amber-500" /> {bet.amount.toLocaleString()} pts
+                                      <Coins className="w-3.5 h-3.5 text-muted-foreground" /> {bet.amount.toLocaleString()}
                                     </p>
                                   </div>
                                   <div className="flex flex-col">
@@ -308,28 +324,33 @@ export default function ProfilePage() {
                                   </div>
                                </div>
 
-                               <div className="flex items-center gap-2">
+                               <div className="flex items-center gap-3">
                                  {canSell && (
-                                    <Button
-                                      onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        // Abrimos el modal con la info de la apuesta
-                                        setBetToSell({
-                                          id: bet.id,
-                                          title: market?.title ?? "Mercado",
-                                          outcomeName: displayOutcome,
-                                          cashoutValue: cashoutValue
-                                        });
-                                      }}
-                                      size="sm"
-                                      className="bg-green-500 hover:bg-green-600 text-white shadow-md shadow-green-500/20 shrink-0 transition-transform hover:scale-105 active:scale-95"
-                                    >
-                                      <Coins className="w-4 h-4 mr-1.5" />
-                                      Vender ({cashoutValue.toLocaleString()})
-                                    </Button>
+                                   <div className="flex flex-col items-end">
+                                     <Button
+                                       onClick={(e) => {
+                                         e.preventDefault();
+                                         e.stopPropagation();
+                                         setBetToSell({
+                                           id: bet.id,
+                                           title: market?.title ?? "Mercado",
+                                           outcomeName: displayOutcome,
+                                           cashoutValue: cashoutValue,
+                                           pnl: pnl,
+                                           pnlPercentage: pnlPercentage
+                                         });
+                                       }}
+                                       size="sm"
+                                       className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-md shrink-0 transition-transform hover:scale-105 active:scale-95"
+                                     >
+                                       <Coins className="w-4 h-4 mr-1.5" />
+                                       Vender ({cashoutValue.toLocaleString()})
+                                     </Button>
+                                     <span className={`text-[11px] font-bold mt-1 tracking-wide ${pnl >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                        {pnl >= 0 ? '+' : ''}{pnlPercentage.toFixed(1)}% 
+                                     </span>
+                                   </div>
                                  )}
-                                 <Badge variant="secondary" className="bg-amber-500/10 text-amber-500 justify-center text-xs py-1">En Juego</Badge>
                                </div>
                             </div>
                           </div>
@@ -339,6 +360,7 @@ export default function ProfilePage() {
                 </TabsContent>
 
                 <TabsContent value="finished" className="space-y-4">
+                  {/* CÓDIGO VIEJO DE FINALIZADAS (SIN CAMBIOS) */}
                   {isLoadingBets ? (
                     <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
                   ) : bets.filter((b) => getMarket(b) && FINISHED_STATUSES.includes(String(getMarket(b)!.status).toLowerCase())).length === 0 ? (
@@ -380,6 +402,7 @@ export default function ProfilePage() {
                 </TabsContent>
 
                 <TabsContent value="bank" className="space-y-3">
+                  {/* CÓDIGO VIEJO DE MOVIMIENTOS (SIN CAMBIOS) */}
                   {isLoadingTransactions ? (
                     <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
                   ) : transactions.length === 0 ? (
@@ -420,19 +443,19 @@ export default function ProfilePage() {
         </div>
       </main>
 
-      {/* MODAL DE CONFIRMACIÓN DE VENTA */}
+      {/* MODAL DE CONFIRMACIÓN DE VENTA - AHORA CON PNL */}
       <Dialog open={!!betToSell} onOpenChange={(open) => !open && setBetToSell(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-xl text-green-500">
-              <Coins className="w-5 h-5" /> Vender Predicción
+            <DialogTitle className="flex items-center gap-2 text-xl text-foreground">
+              <LineChart className="w-5 h-5 text-primary" /> Confirmar Venta
             </DialogTitle>
             <DialogDescription>
-              ¿Estás seguro de que querés realizar un Cashout anticipado?
+              Resumen de tu operación en el mercado.
             </DialogDescription>
           </DialogHeader>
           
-          <div className="py-4 space-y-3">
+          <div className="py-2 space-y-3">
             <div className="p-3 bg-muted/30 rounded-lg border border-border/50 text-sm">
               <p className="text-muted-foreground mb-1">Mercado:</p>
               <p className="font-semibold text-foreground line-clamp-2">{betToSell?.title}</p>
@@ -443,29 +466,37 @@ export default function ProfilePage() {
               <Badge variant="outline" className="font-bold">{betToSell?.outcomeName}</Badge>
             </div>
             
-            <div className="flex justify-between items-center p-4 bg-green-500/10 border border-green-500/30 rounded-lg">
-              <span className="font-medium text-green-600 dark:text-green-400">Recibís ahora:</span>
-              <span className="text-2xl font-bold text-green-600 dark:text-green-400">
+            {/* CUADRO DE RENTABILIDAD */}
+            <div className={`flex justify-between items-center p-4 border rounded-lg ${
+              (betToSell?.pnl ?? 0) >= 0 
+                ? 'bg-green-500/10 border-green-500/30' 
+                : 'bg-red-500/10 border-red-500/30'
+            }`}>
+              <span className="font-medium text-foreground">Rentabilidad (PnL):</span>
+              <span className={`text-2xl font-black ${(betToSell?.pnl ?? 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                {(betToSell?.pnl ?? 0) >= 0 ? '+' : ''}{betToSell?.pnlPercentage.toFixed(1)}%
+              </span>
+            </div>
+
+            <div className="flex justify-between items-center px-2 pt-2">
+              <span className="font-bold text-foreground">Retiro Total:</span>
+              <span className="text-xl font-bold text-primary">
                 {betToSell?.cashoutValue.toLocaleString()} pts
               </span>
             </div>
-            <p className="text-xs text-muted-foreground text-center">
-              Incluye el 5% de comisión de la plataforma por retiro anticipado.
-            </p>
           </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setBetToSell(null)}>Cancelar</Button>
-            <Button onClick={confirmSell} disabled={sellingBetId === betToSell?.id} className="bg-green-500 hover:bg-green-600 text-white">
+            <Button onClick={confirmSell} disabled={sellingBetId === betToSell?.id} className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold">
               {sellingBetId === betToSell?.id ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Coins className="w-4 h-4 mr-2" />}
-              Confirmar Venta
+              Vender Ahora
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        {/* ... Modal Edición ... */}
         <DialogContent className="sm:max-w-md">
           <DialogHeader><DialogTitle>Editar Perfil</DialogTitle><DialogDescription>Personalizá tu avatar y nombre.</DialogDescription></DialogHeader>
           <form onSubmit={handleSaveProfile} className="space-y-6 pt-4">
@@ -485,7 +516,6 @@ export default function ProfilePage() {
       </Dialog>
 
       <Dialog open={isPasswordModalOpen} onOpenChange={setIsPasswordModalOpen}>
-        {/* ... Modal Contraseña ... */}
         <DialogContent className="sm:max-w-md">
           <DialogHeader><DialogTitle>Cambiar Contraseña</DialogTitle></DialogHeader>
           <form onSubmit={handleChangePassword} className="space-y-4 pt-4">
