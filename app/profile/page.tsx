@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Coins, User, ArrowLeft, Loader2, TrendingUp, TrendingDown, History, Pencil, Landmark, Lock, Camera, CheckCircle2, Clock, XCircle, LineChart } from "lucide-react";
+import { Coins, User, ArrowLeft, Loader2, TrendingUp, TrendingDown, History, Pencil, Landmark, Lock, Camera, CheckCircle2, Clock, XCircle, LineChart, Trophy, X } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -33,9 +33,13 @@ function getMarket(bet: BetWithMarket) {
 
 export default function ProfilePage() {
   const router = useRouter();
+  const supabase = createClient();
   const [profile, setProfile] = useState<any>(null);
   const [bets, setBets] = useState<BetWithMarket[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
+  
+  // NUEVO ESTADO PARA LAS OPCIONES
+  const [marketOptions, setMarketOptions] = useState<any[]>([]);
   
   const [isChecking, setIsChecking] = useState(true);
   const [isLoadingBets, setIsLoadingBets] = useState(true);
@@ -43,8 +47,7 @@ export default function ProfilePage() {
   const [isDarkMode, setIsDarkMode] = useState(true);
 
   const [sellingBetId, setSellingBetId] = useState<string | null>(null);
-  
-  const [betToSell, setBetToSell] = useState<{ id: string, title: string, outcomeName: string, cashoutValue: number, pnl: number, pnlPercentage: number } | null>(null);
+  const [betToSell, setBetToSell] = useState<{ id: string, title: string, outcomeName: string, direction: string, cashoutValue: number, pnl: number, pnlPercentage: number } | null>(null);
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [newUsername, setNewUsername] = useState("");
@@ -62,17 +65,20 @@ export default function ProfilePage() {
     setIsLoadingBets(true);
     setIsLoadingTransactions(true);
     
-    const [betsRes, txRes] = await Promise.all([
+    // Agregamos la carga de las opciones del mercado para hacer bien la matemática
+    const [betsRes, txRes, optionsRes] = await Promise.all([
       getMyBets(),
-      getMyTransactions()
+      getMyTransactions(),
+      supabase.from("market_options").select("*")
     ]);
     
     if (!betsRes.error && betsRes.data) setBets(betsRes.data);
     if (!txRes.error && txRes.data) setTransactions(txRes.data);
+    if (optionsRes.data) setMarketOptions(optionsRes.data);
     
     setIsLoadingBets(false);
     setIsLoadingTransactions(false);
-  }, []);
+  }, [supabase]);
 
   const fetchAuth = useCallback(async () => {
     const p = await getProfile();
@@ -133,7 +139,6 @@ export default function ProfilePage() {
     if (!newUsername.trim()) return;
     
     setIsSaving(true);
-    const supabase = createClient();
     let finalAvatarUrl = profile.avatar_url;
 
     if (selectedImage) {
@@ -145,7 +150,7 @@ export default function ProfilePage() {
         .upload(filePath, selectedImage, { upsert: true });
 
       if (uploadError) {
-        toast({ title: "Error", description: "No se pudo subir la imagen. Intenta con una más liviana.", variant: "destructive" });
+        toast({ title: "Error", description: "No se pudo subir la imagen.", variant: "destructive" });
         setIsSaving(false);
         return;
       }
@@ -177,11 +182,45 @@ export default function ProfilePage() {
     const { ok, error } = await updateUserPassword(newPassword);
     setIsChangingPassword(false);
 
-    if (error) { toast({ title: "Error al cambiar contraseña", description: error, variant: "destructive" }); } 
+    if (error) { toast({ title: "Error", description: error, variant: "destructive" }); } 
     else {
       toast({ title: "¡Contraseña actualizada!", description: "Tu contraseña se cambió correctamente." });
       setIsPasswordModalOpen(false); setNewPassword(""); setConfirmPassword("");
     }
+  };
+
+  // LA FÓRMULA MÁGICA PARA CALCULAR EL PRECIO REAL DE VENTA (CON SLIPPAGE)
+  const calculateRealCashout = (bet: any, market: any, opt: any) => {
+    const shares = Number(bet.shares || 0);
+    if (shares <= 0) return Math.round(bet.amount * 0.95); // Viejo sistema
+    
+    const direction = bet.direction || 'yes';
+    const optionVotes = Number(opt.total_votes || 0);
+    const totalVol = Number(market.total_volume || 0);
+    
+    // ACÁ ESTABA EL ERROR: Ahora usamos las opciones cargadas para saber cuántas tiene realmente el mercado
+    const totalOptions = marketOptions.filter(o => o.market_id === market.id).length || 2;
+
+    // 1. Precio actual (antes de vender)
+    const startPriceYes = (optionVotes + 100.0) / (totalVol + (totalOptions * 100.0));
+    
+    // 2. Estimación del retiro
+    const estPayout = shares * (direction === 'yes' ? startPriceYes : (1 - startPriceYes));
+
+    // 3. Calculamos cuánto se hunde el precio
+    let endPriceYes = 0;
+    if (direction === 'yes') {
+      endPriceYes = Math.max(0.01, (optionVotes - estPayout + 100.0) / (Math.max(1, totalVol - estPayout) + (totalOptions * 100.0)));
+    } else {
+      endPriceYes = Math.max(0.01, (optionVotes + 100.0) / (Math.max(1, totalVol - estPayout) + (totalOptions * 100.0)));
+    }
+
+    // 4. El precio promedio que el mercado te va a pagar realmente
+    let avgPriceYes = (startPriceYes + endPriceYes) / 2.0;
+    avgPriceYes = Math.max(0.01, Math.min(0.99, avgPriceYes));
+
+    const currentPrice = direction === 'yes' ? avgPriceYes : (1 - avgPriceYes);
+    return Math.round(shares * currentPrice);
   };
 
   if (isChecking) return <div className="min-h-screen bg-background flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
@@ -217,7 +256,6 @@ export default function ProfilePage() {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-muted-foreground">Trader</p>
                   <p className="text-2xl font-bold text-foreground truncate">{displayName}</p>
-                  {profile.email && <p className="text-sm text-muted-foreground mt-0.5 truncate">{profile.email}</p>}
                 </div>
               </div>
 
@@ -230,12 +268,6 @@ export default function ProfilePage() {
                   </p>
                 </div>
               </div>
-
-              {profile.role === "admin" && (
-                <Button asChild className="w-full bg-slate-800 text-white hover:bg-slate-700">
-                  <Link href="/admin" className="flex items-center justify-center gap-2">Panel de Administración</Link>
-                </Button>
-              )}
             </CardContent>
           </Card>
 
@@ -261,39 +293,27 @@ export default function ProfilePage() {
                         const opt = bet.option_details;
                         const isOldBinary = bet.outcome === "yes" || bet.outcome === "no";
                         const displayOutcome = opt ? opt.option_name : (isOldBinary ? (bet.outcome === "yes" ? "SÍ" : "NO") : "Opción");
-                        const optColor = opt ? opt.color : (bet.outcome === "yes" ? "#0ea5e9" : "#ef4444");
+                        const direction = (bet as any).direction || 'yes';
 
                         let cashoutValue = 0;
                         let canSell = false;
-                        let currentPrice = 0;
                         let pnl = 0;
                         let pnlPercentage = 0;
                         
                         if (market) {
                           canSell = true;
-                          const totalVol = Number(market.total_volume || 0);
                           const shares = Number((bet as any).shares || 0);
 
-                          // LA MAGIA: Si tiene acciones, usa el nuevo sistema AMM de Polymarket
-                          if (shares > 0) {
-                            const optionVotes = Number(opt?.total_votes || 0);
-                            const totalOptions = (market as any).market_options?.length || 2;
-                            currentPrice = (optionVotes + 100.0) / (totalVol + (totalOptions * 100.0));
-                            if (currentPrice < 0.01) currentPrice = 0.01;
-                            if (currentPrice > 0.99) currentPrice = 0.99;
-                            
-                            cashoutValue = Math.round(shares * currentPrice);
+                          if (shares > 0 && opt) {
+                            cashoutValue = calculateRealCashout(bet, market, opt);
                           } else {
-                            // Sistema Viejo (Fallback)
+                            // Fallback
                             let currVal = bet.amount;
                             if (opt && bet.outcome.length > 10) {
                               const totalVotes = Number(opt.total_votes);
-                              if (totalVotes > 0) currVal = (bet.amount / totalVotes) * totalVol;
-                            } else if (isOldBinary) {
-                              const totalVotes = bet.outcome === "yes" ? Number((market as any).yes_votes || 0) : Number((market as any).no_votes || 0);
-                              if (totalVotes > 0) currVal = (bet.amount / totalVotes) * totalVol;
+                              if (totalVotes > 0) currVal = (bet.amount / totalVotes) * Number(market.total_volume);
                             }
-                            cashoutValue = Math.round(currVal * 0.95); // 5% fee en el viejo
+                            cashoutValue = Math.round(currVal * 0.95);
                           }
 
                           pnl = cashoutValue - bet.amount;
@@ -318,8 +338,8 @@ export default function ProfilePage() {
                                   </div>
                                   <div className="flex flex-col">
                                     <p className="text-[10px] text-muted-foreground font-bold uppercase mb-1">Predicción</p>
-                                    <Badge variant="outline" className="font-bold border bg-opacity-10" style={{ backgroundColor: `${optColor}15`, color: optColor, borderColor: `${optColor}30` }}>
-                                      {displayOutcome}
+                                    <Badge variant="outline" className={cn("font-bold border", direction === 'no' ? "bg-red-500/10 text-red-600 dark:text-red-500 border-red-500/30" : "bg-green-500/10 text-green-600 dark:text-green-500 border-green-500/30")}>
+                                      {direction === 'no' ? 'No' : 'Sí'} - {displayOutcome}
                                     </Badge>
                                   </div>
                                </div>
@@ -335,6 +355,7 @@ export default function ProfilePage() {
                                            id: bet.id,
                                            title: market?.title ?? "Mercado",
                                            outcomeName: displayOutcome,
+                                           direction: direction,
                                            cashoutValue: cashoutValue,
                                            pnl: pnl,
                                            pnlPercentage: pnlPercentage
@@ -360,26 +381,23 @@ export default function ProfilePage() {
                 </TabsContent>
 
                 <TabsContent value="finished" className="space-y-4">
-                  {/* CÓDIGO VIEJO DE FINALIZADAS (SIN CAMBIOS) */}
-                  {isLoadingBets ? (
-                    <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
-                  ) : bets.filter((b) => getMarket(b) && FINISHED_STATUSES.includes(String(getMarket(b)!.status).toLowerCase())).length === 0 ? (
+                   {bets.filter((b) => getMarket(b) && FINISHED_STATUSES.includes(String(getMarket(b)!.status).toLowerCase())).length === 0 ? (
                     <p className="py-8 text-center text-sm text-muted-foreground">Aún no hay resultados de tus apuestas.</p>
                   ) : (
-                    bets
-                      .filter((b) => getMarket(b) && FINISHED_STATUSES.includes(String(getMarket(b)!.status).toLowerCase()))
-                      .map((bet) => {
+                    bets.filter((b) => getMarket(b) && FINISHED_STATUSES.includes(String(getMarket(b)!.status).toLowerCase())).map((bet) => {
                         const market = getMarket(bet);
-                        const won = market?.winning_outcome === bet.outcome;
                         const opt = bet.option_details;
-                        const displayOutcome = opt ? opt.option_name : (bet.outcome === "yes" ? "SÍ" : "NO");
-                        const optColor = opt ? opt.color : (bet.outcome === "yes" ? "#0ea5e9" : "#ef4444");
+                        const direction = (bet as any).direction || 'yes';
+                        const displayOutcome = opt ? opt.option_name : 'Opción';
+                        
+                        let won = false;
+                        const wonYes = direction === 'yes' && market?.winning_outcome === bet.outcome;
+                        const wonNo = direction === 'no' && market?.winning_outcome !== bet.outcome && market?.winning_outcome !== null;
+                        won = wonYes || wonNo;
 
                         return (
                           <div key={bet.id} className="rounded-xl border border-border/50 bg-muted/10 p-4 opacity-90">
-                            <Link href={`/market/${bet.market_id}`} className="block">
-                              <p className="font-medium text-foreground line-clamp-2 mb-3">{market?.title ?? "Mercado"}</p>
-                            </Link>
+                            <p className="font-medium text-foreground line-clamp-2 mb-3">{market?.title ?? "Mercado"}</p>
                             <div className="flex items-center justify-between bg-background p-3 rounded-lg border border-border/50">
                                <div className="flex items-center gap-4">
                                   <div className="flex flex-col">
@@ -388,11 +406,13 @@ export default function ProfilePage() {
                                   </div>
                                   <div className="flex flex-col">
                                     <p className="text-[10px] text-muted-foreground font-bold uppercase mb-0.5">Predicción</p>
-                                    <Badge variant="outline" className="text-xs" style={{ backgroundColor: `${optColor}10`, color: optColor, borderColor: `${optColor}30` }}>{displayOutcome}</Badge>
+                                    <Badge variant="outline" className={cn("text-xs font-bold border", direction === 'no' ? "bg-red-500/10 text-red-600 dark:text-red-500 border-red-500/30" : "bg-green-500/10 text-green-600 dark:text-green-500 border-green-500/30")}>
+                                      {direction === 'no' ? 'No' : 'Sí'} - {displayOutcome}
+                                    </Badge>
                                   </div>
                                </div>
                                <span className={`px-3 py-1 rounded-md text-xs font-bold tracking-wide border ${won ? "bg-green-500/10 border-green-500/30 text-green-500" : "bg-red-500/10 border-red-500/30 text-red-500"}`}>
-                                 {won ? "GANASTE" : "PERDISTE"}
+                                 {won ? "ACERTÓ" : "PERDIÓ"}
                                </span>
                             </div>
                           </div>
@@ -402,14 +422,12 @@ export default function ProfilePage() {
                 </TabsContent>
 
                 <TabsContent value="bank" className="space-y-3">
-                  {/* CÓDIGO VIEJO DE MOVIMIENTOS (SIN CAMBIOS) */}
                   {isLoadingTransactions ? (
                     <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
                   ) : transactions.length === 0 ? (
                     <div className="text-center py-10 border-2 border-dashed border-border/50 rounded-xl bg-muted/10">
                       <Landmark className="w-10 h-10 text-muted-foreground mx-auto mb-3 opacity-50" />
                       <h3 className="font-semibold text-foreground mb-1">No hay movimientos</h3>
-                      <p className="text-sm text-muted-foreground">Todavía no tenés transacciones registradas.</p>
                     </div>
                   ) : (
                     <div className="space-y-2">
@@ -443,16 +461,12 @@ export default function ProfilePage() {
         </div>
       </main>
 
-      {/* MODAL DE CONFIRMACIÓN DE VENTA - AHORA CON PNL */}
       <Dialog open={!!betToSell} onOpenChange={(open) => !open && setBetToSell(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-xl text-foreground">
               <LineChart className="w-5 h-5 text-primary" /> Confirmar Venta
             </DialogTitle>
-            <DialogDescription>
-              Resumen de tu operación en el mercado.
-            </DialogDescription>
           </DialogHeader>
           
           <div className="py-2 space-y-3">
@@ -462,11 +476,12 @@ export default function ProfilePage() {
             </div>
             
             <div className="flex justify-between items-center p-3 bg-muted/30 rounded-lg border border-border/50">
-              <span className="text-sm text-muted-foreground">Tu predicción:</span>
-              <Badge variant="outline" className="font-bold">{betToSell?.outcomeName}</Badge>
+              <span className="text-sm text-muted-foreground">Tu posición:</span>
+              <Badge variant="outline" className={cn("font-bold border", betToSell?.direction === 'no' ? "bg-red-500/10 text-red-600 dark:text-red-500 border-red-500/30" : "bg-green-500/10 text-green-600 dark:text-green-500 border-green-500/30")}>
+                {betToSell?.direction === 'no' ? 'No' : 'Sí'} - {betToSell?.outcomeName}
+              </Badge>
             </div>
             
-            {/* CUADRO DE RENTABILIDAD */}
             <div className={`flex justify-between items-center p-4 border rounded-lg ${
               (betToSell?.pnl ?? 0) >= 0 
                 ? 'bg-green-500/10 border-green-500/30' 
@@ -493,36 +508,6 @@ export default function ProfilePage() {
               Vender Ahora
             </Button>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>Editar Perfil</DialogTitle><DialogDescription>Personalizá tu avatar y nombre.</DialogDescription></DialogHeader>
-          <form onSubmit={handleSaveProfile} className="space-y-6 pt-4">
-            <div className="flex flex-col items-center justify-center gap-3">
-              <div onClick={() => fileInputRef.current?.click()} className="relative w-24 h-24 rounded-full bg-muted border-2 border-dashed border-border flex items-center justify-center cursor-pointer overflow-hidden group hover:border-primary transition-colors">
-                {previewUrl ? ( <><img src={previewUrl} alt="Preview" className="w-full h-full object-cover" /><div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"><Camera className="w-6 h-6 text-white" /></div></> ) : ( <div className="flex flex-col items-center text-muted-foreground group-hover:text-primary transition-colors"><Camera className="w-8 h-8 mb-1" /><span className="text-[10px] uppercase font-bold">Subir</span></div> )}
-              </div>
-              <input type="file" ref={fileInputRef} onChange={handleImageSelect} accept="image/png, image/jpeg, image/webp" className="hidden" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="username">Nombre de Usuario</Label>
-              <Input id="username" value={newUsername} onChange={(e) => setNewUsername(e.target.value)} maxLength={20} required />
-            </div>
-            <DialogFooter className="pt-4"><Button type="button" variant="outline" onClick={() => setIsEditModalOpen(false)}>Cancelar</Button><Button type="submit" disabled={isSaving || !newUsername.trim()}>{isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : "Guardar Cambios"}</Button></DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isPasswordModalOpen} onOpenChange={setIsPasswordModalOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>Cambiar Contraseña</DialogTitle></DialogHeader>
-          <form onSubmit={handleChangePassword} className="space-y-4 pt-4">
-            <div className="space-y-2"><Label>Nueva Contraseña</Label><Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} minLength={6} required /></div>
-            <div className="space-y-2"><Label>Repetir Contraseña</Label><Input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} minLength={6} required /></div>
-            <DialogFooter className="pt-4"><Button type="button" variant="outline" onClick={() => setIsPasswordModalOpen(false)}>Cancelar</Button><Button type="submit" disabled={isChangingPassword || !newPassword || !confirmPassword}>{isChangingPassword ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : "Actualizar Contraseña"}</Button></DialogFooter>
-          </form>
         </DialogContent>
       </Dialog>
     </div>

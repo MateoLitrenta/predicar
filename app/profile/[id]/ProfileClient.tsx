@@ -12,7 +12,6 @@ import { createClient } from "@/lib/supabase/client";
 import { Loader2, ArrowLeft, User as UserIcon, Calendar, Trophy, Coins, History, CheckCircle2, Clock, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
-// NUEVO: Importamos la función para vender
 import { sellBet } from "@/lib/actions";
 
 interface ProfileClientProps {
@@ -30,9 +29,9 @@ export default function ProfileClient({ profileId }: ProfileClientProps) {
 
   const [viewedProfile, setViewedProfile] = useState<any>(null);
   const [userBets, setUserBets] = useState<any[]>([]);
-  const [marketOptions, setMarketOptions] = useState<any[]>([]); // NUEVO: Para saber colores y votos
+  const [marketOptions, setMarketOptions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [sellingBetId, setSellingBetId] = useState<string | null>(null); // NUEVO: Estado del botón vender
+  const [sellingBetId, setSellingBetId] = useState<string | null>(null);
 
   const fetchAuth = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -58,14 +57,12 @@ export default function ProfileClient({ profileId }: ProfileClientProps) {
     }
     setViewedProfile(profileData);
 
-    // NUEVO: Agregamos total_volume para poder calcular el precio de venta
     const { data: betsData, error: betsError } = await supabase
       .from("bets")
-      .select("*, markets(title, category, status, winning_outcome, total_volume)")
+      .select("*, markets(*)") 
       .eq("user_id", profileId)
       .order("created_at", { ascending: false });
 
-    // NUEVO: Traemos todas las opciones para poder pintar los colores y nombres
     const { data: optionsData } = await supabase.from("market_options").select("*");
 
     setUserBets(betsData || []);
@@ -83,9 +80,8 @@ export default function ProfileClient({ profileId }: ProfileClientProps) {
     else document.documentElement.classList.remove("dark");
   }, [isDarkMode]);
 
-  // NUEVO: Función que ejecuta la venta
   const handleSell = async (betId: string, e: React.MouseEvent) => {
-    e.preventDefault(); // Evita que se abra el link del mercado
+    e.preventDefault();
     e.stopPropagation();
 
     setSellingBetId(betId);
@@ -100,6 +96,33 @@ export default function ProfileClient({ profileId }: ProfileClientProps) {
       fetchViewedProfileData();
       setSellingBetId(null);
     }
+  };
+
+  // LA FÓRMULA MÁGICA PARA CALCULAR EL PRECIO REAL DE VENTA (CON SLIPPAGE)
+  const calculateRealCashout = (bet: any, market: any, opt: any) => {
+    const shares = Number(bet.shares || 0);
+    if (shares <= 0) return Math.round(bet.amount * 0.95);
+    
+    const direction = bet.direction || 'yes';
+    const optionVotes = Number(opt.total_votes || 0);
+    const totalVol = Number(market.total_volume || 0);
+    const totalOptions = marketOptions.filter(o => o.market_id === market.id).length || 2;
+
+    const startPriceYes = (optionVotes + 100.0) / (totalVol + (totalOptions * 100.0));
+    const estPayout = shares * (direction === 'yes' ? startPriceYes : (1 - startPriceYes));
+
+    let endPriceYes = 0;
+    if (direction === 'yes') {
+      endPriceYes = Math.max(0.01, (optionVotes - estPayout + 100.0) / (Math.max(1, totalVol - estPayout) + (totalOptions * 100.0)));
+    } else {
+      endPriceYes = Math.max(0.01, (optionVotes + 100.0) / (Math.max(1, totalVol - estPayout) + (totalOptions * 100.0)));
+    }
+
+    let avgPriceYes = (startPriceYes + endPriceYes) / 2.0;
+    avgPriceYes = Math.max(0.01, Math.min(0.99, avgPriceYes));
+
+    const currentPrice = direction === 'yes' ? avgPriceYes : (1 - avgPriceYes);
+    return Math.round(shares * currentPrice);
   };
 
   if (isLoading) return <div className="min-h-screen bg-background flex justify-center items-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
@@ -171,29 +194,51 @@ export default function ProfileClient({ profileId }: ProfileClientProps) {
               <div className="divide-y divide-border/50">
                 {userBets.map((bet) => {
                   const market = bet.markets;
-                  const isResolved = market?.status === 'resolved';
-                  const won = isResolved && market?.winning_outcome === bet.outcome;
-                  const lost = isResolved && market?.winning_outcome !== bet.outcome;
+                  if (!market) return null;
 
-                  // Lógica para detectar opciones múltiples vs apuestas viejas
-                  const opt = marketOptions.find(o => o.id === bet.outcome);
+                  const isResolved = market.status === 'resolved';
                   const isOldBinary = bet.outcome === 'yes' || bet.outcome === 'no';
+                  const opt = marketOptions.find(o => o.id === bet.outcome);
+                  
                   const displayOutcome = opt ? opt.option_name : (isOldBinary ? (bet.outcome === 'yes' ? 'SÍ' : 'NO') : 'Opción');
-                  const optColor = opt ? opt.color : (bet.outcome === 'yes' ? '#0ea5e9' : '#ef4444');
+                  const direction = bet.direction || 'yes';
 
-                  // MATEMÁTICA DE CASHOUT EN TIEMPO REAL
+                  let won = false;
+                  if (isResolved) {
+                    if (isOldBinary) {
+                      won = market.winning_outcome === bet.outcome;
+                    } else {
+                      const wonYes = direction === 'yes' && market.winning_outcome === bet.outcome;
+                      const wonNo = direction === 'no' && market.winning_outcome !== bet.outcome && market.winning_outcome !== null;
+                      won = wonYes || wonNo;
+                    }
+                  }
+
                   let cashoutValue = 0;
+                  let pnlPct = 0;
+                  let isPositive = false;
                   let canSell = false;
-                  // Solo permitimos vender si el mercado está activo, si sos el dueño, y si es una apuesta nueva (con UUID)
-                  if (isMe && !isResolved && opt) {
-                      canSell = true;
-                      const totalVotes = Number(opt.total_votes);
-                      const totalVol = Number(market?.total_volume || 0);
+
+                  if (!isResolved) {
+                    canSell = isMe;
+                    const shares = Number(bet.shares || 0);
+
+                    if (shares > 0 && opt) {
+                      // AHORA USA EL SLIPPAGE
+                      cashoutValue = calculateRealCashout(bet, market, opt);
+                    } else {
+                      // Fallback
                       let currVal = bet.amount;
-                      if (totalVotes > 0) {
-                          currVal = (bet.amount / totalVotes) * totalVol;
+                      if (opt && bet.outcome.length > 10) {
+                        const totalVotes = Number(opt.total_votes);
+                        if (totalVotes > 0) currVal = (bet.amount / totalVotes) * Number(market.total_volume);
                       }
-                      cashoutValue = Math.round(currVal * 0.95); // 5% de penalidad
+                      cashoutValue = Math.round(currVal * 0.95);
+                    }
+
+                    const pnl = cashoutValue - bet.amount;
+                    pnlPct = (pnl / bet.amount) * 100;
+                    isPositive = pnl >= 0;
                   }
 
                   return (
@@ -202,13 +247,13 @@ export default function ProfileClient({ profileId }: ProfileClientProps) {
                         
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-2">
-                            <Badge variant="outline" className="text-[10px] uppercase">{market?.category || "Mercado"}</Badge>
+                            <Badge variant="outline" className="text-[10px] uppercase">{market.category || "Mercado"}</Badge>
                             <span className="text-xs text-muted-foreground flex items-center gap-1">
                               <Clock className="w-3 h-3" /> {new Date(bet.created_at).toLocaleDateString()}
                             </span>
                           </div>
                           <h3 className="font-semibold text-base sm:text-lg text-foreground group-hover:text-primary transition-colors line-clamp-2 pr-4">
-                            {market?.title || "Mercado no disponible"}
+                            {market.title || "Mercado no disponible"}
                           </h3>
                         </div>
 
@@ -217,15 +262,15 @@ export default function ProfileClient({ profileId }: ProfileClientProps) {
                           <div className="flex flex-col min-w-[100px]">
                             <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1">Inversión</p>
                             <p className="font-bold text-foreground flex items-center gap-1.5 text-base">
-                              <Coins className="w-4 h-4 text-amber-500" /> {bet.amount.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">pts</span>
+                              <Coins className="w-4 h-4 text-muted-foreground" /> {bet.amount.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">pts</span>
                             </p>
                           </div>
 
-                          <div className="flex flex-col min-w-[80px]">
+                          <div className="flex flex-col min-w-[100px]">
                             <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1">Predicción</p>
-                            <div className="inline-flex items-center justify-center px-3 py-1 rounded-md text-sm font-bold w-fit border" style={{ backgroundColor: `${optColor}15`, color: optColor, borderColor: `${optColor}30` }}>
-                              {displayOutcome}
-                            </div>
+                            <Badge variant="outline" className={cn("text-xs font-bold border h-7", direction === 'no' ? "bg-red-500/10 text-red-600 dark:text-red-500 border-red-500/30" : "bg-green-500/10 text-green-600 dark:text-green-500 border-green-500/30")}>
+                              {direction === 'no' ? 'No' : 'Sí'} - {displayOutcome}
+                            </Badge>
                           </div>
 
                           <div className="flex flex-col min-w-[100px] sm:items-end w-full sm:w-auto mt-2 sm:mt-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border/50">
@@ -233,25 +278,27 @@ export default function ProfileClient({ profileId }: ProfileClientProps) {
                             <div className="w-full sm:w-auto flex items-center justify-end gap-2">
                               {!isResolved ? (
                                 <>
-                                  {/* EL BOTÓN MÁGICO DE VENDER */}
+                                  <Badge variant="outline" className={cn("font-bold border", isPositive ? "bg-green-500/10 text-green-600 dark:text-green-500 border-green-500/30" : "bg-red-500/10 text-red-600 dark:text-red-500 border-red-500/30")}>
+                                    {isPositive ? "+" : ""}{pnlPct.toFixed(1)}%
+                                  </Badge>
+
                                   {canSell && (
                                     <Button
                                       onClick={(e) => handleSell(bet.id, e)}
                                       disabled={sellingBetId === bet.id}
                                       size="sm"
-                                      className="bg-green-500 hover:bg-green-600 text-white h-7 text-xs px-3 shadow-md shadow-green-500/20"
+                                      className="bg-primary hover:bg-primary/90 text-primary-foreground h-7 text-xs px-3 shadow-sm"
                                     >
                                       {sellingBetId === bet.id ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Coins className="w-3 h-3 mr-1" />}
                                       Vender ({cashoutValue.toLocaleString()})
                                     </Button>
                                   )}
-                                  <Badge variant="secondary" className="bg-amber-500/10 text-amber-500 justify-center text-xs py-1">En Juego</Badge>
                                 </>
                               ) : won ? (
                                 <Badge variant="default" className="bg-green-500 hover:bg-green-600 w-full sm:w-auto justify-center sm:justify-end gap-1.5 text-xs py-1"><CheckCircle2 className="w-3.5 h-3.5" /> ¡Ganó!</Badge>
-                              ) : lost ? (
+                              ) : (
                                 <Badge variant="destructive" className="w-full sm:w-auto justify-center sm:justify-end gap-1.5 opacity-90 text-xs py-1"><XCircle className="w-3.5 h-3.5" /> Perdió</Badge>
-                              ) : null}
+                              )}
                             </div>
                           </div>
 
