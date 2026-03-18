@@ -10,9 +10,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { createClient } from "@/lib/supabase/client";
 import { sellBet } from "@/lib/actions";
-import { Loader2, ArrowLeft, Clock, Coins, X, User as UserIcon, MessageSquare, Reply, ChevronDown, ChevronUp, Trash2, ArrowDownRight, ArrowUpRight, TrendingUp, LineChart as LineChartIcon } from "lucide-react";
+import { Loader2, ArrowLeft, Clock, Coins, X, User as UserIcon, MessageSquare, Reply, ChevronDown, ChevronUp, Trash2, ArrowDownRight, ArrowUpRight, TrendingUp, LineChart as LineChartIcon, Share2, Twitter, MessageCircle, Copy, Check } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
@@ -37,6 +44,11 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
+  // Estados de Compartir
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isCopied, setIsCopied] = useState(false);
+  const [marketUrl, setMarketUrl] = useState("");
+
   // Estados de Trading
   const [tradeTab, setTradeTab] = useState("buy");
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
@@ -54,7 +66,11 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
   const [expandedThreads, setExpandedThreads] = useState<Record<string, boolean>>({});
   const [commentToDelete, setCommentToDelete] = useState<string | null>(null);
   const [isDeletingComment, setIsDeletingComment] = useState(false);
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+
+  useEffect(() => {
+    // Seteamos la URL actual para el botón de compartir
+    setMarketUrl(window.location.href);
+  }, []);
 
   const fetchUserAndProfile = useCallback(async () => {
     const { data: { user: currentUser } } = await supabase.auth.getUser();
@@ -160,6 +176,24 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
     if (isDarkMode) document.documentElement.classList.add("dark");
     else document.documentElement.classList.remove("dark");
   }, [isDarkMode]);
+
+  // FUNCIONES PARA COMPARTIR
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(marketUrl);
+    setIsCopied(true);
+    toast({ title: "¡Link copiado!", description: "El enlace se guardó en tu portapapeles." });
+    setTimeout(() => setIsCopied(false), 2000);
+  };
+
+  const handleTwitterShare = () => {
+    const text = encodeURIComponent(`¡Mirá este mercado en PREDIX! ${market.title} ¿Qué opinás?\n\n`);
+    window.open(`https://twitter.com/intent/tweet?text=${text}&url=${encodeURIComponent(marketUrl)}`, '_blank');
+  };
+
+  const handleWhatsAppShare = () => {
+    const text = encodeURIComponent(`¡Mirá este mercado en PREDIX!\n*${market.title}*\n\nEntrá y hacé tu predicción acá: ${marketUrl}`);
+    window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
+  };
 
   // CÁLCULO DE PRECIOS AMM (SPOT PRICE para compras)
   const getOptionPrice = (optionVotes: number) => {
@@ -434,7 +468,12 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
             <div className="flex gap-4 sm:gap-6 items-start">
               {market.image_url && <img src={market.image_url} alt="Mercado" className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl object-cover shrink-0 shadow-md border border-border/50" />}
               <div>
-                <Badge variant="secondary" className="mb-3 capitalize">{market.category}</Badge>
+                <div className="flex flex-wrap gap-2 mb-3 items-center">
+                   <Badge variant="secondary" className="capitalize">{market.category}</Badge>
+                   <Button variant="outline" size="sm" className="h-6 px-3 text-[10px] uppercase font-bold rounded-full flex items-center gap-1.5 border-border/50 hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setIsShareModalOpen(true)}>
+                     <Share2 className="w-3 h-3" /> Compartir
+                   </Button>
+                </div>
                 <h1 className="text-2xl sm:text-3xl font-bold text-foreground leading-tight mb-2">{market.title}</h1>
                 <div className="flex items-center gap-4 text-sm text-muted-foreground mt-3">
                   <div className="flex items-center gap-1.5"><Coins className="w-4 h-4" />{totalVotesMulti.toLocaleString()} pts Vol.</div>
@@ -624,7 +663,7 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
                   </div>
                 </TabsContent>
 
-                {/* PESTAÑA VENDER - AHORA CON SLIPPAGE REAL */}
+                {/* PESTAÑA VENDER */}
                 <TabsContent value="sell" className="p-2 sm:p-3 mt-0">
                   {!user ? (
                     <div className="text-center py-8">
@@ -641,7 +680,6 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
                       {userBets.map(bet => {
                         const opt = options.find(o => o.id === bet.outcome);
                         
-                        // USA EL CÁLCULO REAL CON SLIPPAGE
                         const cashoutVal = opt ? calculateRealCashout(bet, opt) : Math.round(bet.amount * 0.95);
                         const pnl = cashoutVal - bet.amount;
                         const pnlPct = (pnl / bet.amount) * 100;
@@ -703,6 +741,35 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
           <div className="block lg:hidden w-full order-3 mt-2">{DebateBlock}</div>
           <div className="block lg:hidden w-full order-4 mt-2">{UltimasApuestasBlock}</div>
         </div>
+
+        {/* MODAL DE COMPARTIR */}
+        <Dialog open={isShareModalOpen} onOpenChange={setIsShareModalOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-xl">
+                <Share2 className="w-5 h-5 text-primary" /> Compartir Mercado
+              </DialogTitle>
+              <DialogDescription>
+                Invitá a tus amigos a predecir y debatir en este mercado.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-col gap-4 py-4">
+              <Button variant="outline" className="w-full h-12 flex items-center justify-start gap-3 text-base border-border/50 hover:bg-muted/30 transition-colors" onClick={handleWhatsAppShare}>
+                <MessageCircle className="w-5 h-5 text-green-500" /> Compartir en WhatsApp
+              </Button>
+              <Button variant="outline" className="w-full h-12 flex items-center justify-start gap-3 text-base border-border/50 hover:bg-muted/30 transition-colors" onClick={handleTwitterShare}>
+                <Twitter className="w-5 h-5 text-blue-400" /> Compartir en X (Twitter)
+              </Button>
+              <div className="relative mt-2">
+                <Input readOnly value={marketUrl} className="pr-12 bg-muted/20 border-border/50 h-10 text-xs sm:text-sm text-muted-foreground" />
+                <Button size="icon" variant="ghost" className="absolute right-0 top-0 h-full w-12 hover:bg-transparent" onClick={handleCopyLink}>
+                  {isCopied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4 text-muted-foreground" />}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
       </main>
 
       <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} onAuthSuccess={() => { setIsAuthModalOpen(false); fetchUserAndProfile(); }} isDarkMode={isDarkMode} />

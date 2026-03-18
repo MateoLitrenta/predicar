@@ -1,24 +1,11 @@
 "use client";
 
-import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { Card, CardContent, CardFooter } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Clock, ChevronRight, Loader2, Coins, CheckCheck } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Coins, Clock, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { toast } from "@/hooks/use-toast";
-import { createClient } from "@/lib/supabase/client";
 
 interface MarketOption {
   id: string;
@@ -37,8 +24,8 @@ interface MarketCardProps {
   options: MarketOption[];
   userId: string | null;
   userPoints: number;
-  onBetPlaced: (newBalance: number) => void;
-  onOpenAuthModal: () => void;
+  onBetPlaced?: (newPoints: number) => void;
+  onOpenAuthModal?: () => void;
 }
 
 export function MarketCard({
@@ -48,191 +35,110 @@ export function MarketCard({
   totalVolume,
   endDate,
   imageUrl,
-  options,
-  userId,
-  userPoints,
-  onBetPlaced,
-  onOpenAuthModal,
+  options = [],
 }: MarketCardProps) {
   const router = useRouter();
-  const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
-  const [isBetModalOpen, setIsBetModalOpen] = useState(false);
-  const [betAmount, setBetAmount] = useState("");
-  const [isPlacingBet, setIsPlacingBet] = useState(false);
-  const [betSuccess, setBetSuccess] = useState(false);
 
-  const getCategoryColor = (cat: string) => {
-    const normalizedCat = cat.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    switch (normalizedCat) {
-      case "politica": return "bg-primary/10 text-primary border-primary/20";
-      case "deportes": return "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20";
-      case "finanzas": return "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20";
-      case "cripto": return "bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20";
-      case "tecnologia": return "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/20";
-      case "ciencia": return "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20";
-      case "clima": return "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20";
-      case "entretenimiento": return "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20";
-      case "musica": return "bg-pink-500/10 text-pink-600 dark:text-pink-400 border-pink-500/20";
-      default: return "bg-muted text-muted-foreground";
-    }
+  const truncateTitle = (str: string, maxLength: number) => {
+    if (str.length <= maxLength) return str;
+    return str.substring(0, maxLength) + "...";
   };
 
-  const handlePredictClick = () => {
-    if (!selectedOptionId) return;
-    if (!userId) { onOpenAuthModal(); return; }
-    setIsBetModalOpen(true);
-    setBetAmount("");
-    setBetSuccess(false);
+  const handleNavigateToMarket = () => {
+    router.push(`/market/${id}`);
   };
 
-  const handlePlaceBet = async () => {
-    if (!userId || !selectedOptionId || !betAmount) return;
-    const numericAmount = parseInt(betAmount, 10);
-    
-    if (isNaN(numericAmount) || numericAmount <= 0) {
-      toast({ title: "Monto inválido", description: "Ingresá una cantidad válida", variant: "destructive" });
-      return;
-    }
-    if (numericAmount > userPoints) {
-      toast({ title: "Saldo Insuficiente", description: `Solo tenés ${userPoints} pts disponibles.`, variant: "destructive" });
-      return;
-    }
+  const totalVolNum = Number(totalVolume.replace(/,/g, '') || 0);
+  const totalOptsCount = options.length || 2;
 
-    setIsPlacingBet(true);
-    try {
-      const supabase = createClient();
-      const { error } = await supabase.rpc("realizar_apuesta", {
-        p_amount: numericAmount, p_market_id: id, p_outcome: selectedOptionId,
-      });
-
-      if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
-
-      setBetSuccess(true);
-      onBetPlaced(userPoints - numericAmount);
-      const optionName = options.find(o => o.id === selectedOptionId)?.option_name || "la opción";
-      toast({ title: "¡Apuesta confirmada!", description: `Invertiste ${numericAmount} pts a ${optionName}.` });
-      
-      setTimeout(() => { setIsBetModalOpen(false); setSelectedOptionId(null); setBetSuccess(false); router.refresh(); }, 1500);
-    } catch (err) {
-      toast({ title: "Error", description: "Error de conexión", variant: "destructive" });
-    } finally {
-      setIsPlacingBet(false);
-    }
+  const getProbability = (votes: number) => {
+    let ammPrice = (Number(votes) + 100.0) / (totalVolNum + (totalOptsCount * 100.0));
+    ammPrice = Math.max(0.01, Math.min(0.99, ammPrice));
+    return ammPrice * 100;
   };
 
-  const totalVotesMulti = options.reduce((sum, opt) => sum + Number(opt.total_votes), 0);
-  
-  // AHORA MOSTRAMOS HASTA 4 OPCIONES
-  const displayOptions = options.slice(0, 4); 
-
-  const selectedOptionName = options.find(o => o.id === selectedOptionId)?.option_name || "una opción";
+  // LA SOLUCIÓN: Ordenamos las opciones de mayor a menor cantidad de votos (probabilidad)
+  const sortedOptions = [...options].sort((a, b) => Number(b.total_votes) - Number(a.total_votes));
 
   return (
-    <>
-      <Card className="group hover:shadow-lg hover:shadow-primary/5 transition-all duration-300 border-border/50 bg-card/80 backdrop-blur-sm flex flex-col h-full">
-        <CardContent className="pt-4 px-4 pb-2 flex-1 flex flex-col">
-          <Link href={`/market/${id}`} className="flex gap-3 items-start mb-2 group/link cursor-pointer">
-            {imageUrl && <img src={imageUrl} alt="Mercado" className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg object-cover shrink-0 shadow-sm border border-border/50 mt-0.5 group-hover/link:opacity-80 transition-opacity" />}
-            <h3 className="font-semibold text-foreground leading-snug line-clamp-3 group-hover/link:text-primary transition-colors text-base sm:text-lg">
-              {question}
-            </h3>
-          </Link>
+    <Card 
+      onClick={handleNavigateToMarket}
+      className="group bg-card hover:bg-muted/10 transition-all duration-300 border-border/50 hover:border-primary/50 shadow-sm hover:shadow-md cursor-pointer relative overflow-hidden flex flex-col h-full"
+    >
+      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
 
-          <div className="flex-1" />
-
-          <div className="space-y-3 mb-4 mt-4">
-            {/* GRILLA DE 2 COLUMNAS PARA LOS BOTONES */}
-            <div className="grid grid-cols-2 gap-2">
-              {displayOptions.map((opt) => {
-                const pct = totalVotesMulti === 0 ? (100 / options.length) : ((Number(opt.total_votes) / totalVotesMulti) * 100);
-                const isSelected = selectedOptionId === opt.id;
-                return (
-                  <button
-                    key={opt.id}
-                    onClick={() => setSelectedOptionId(opt.id)}
-                    className={cn("py-2 px-2 rounded-lg text-xs font-semibold transition-all text-center truncate border border-transparent")}
-                    style={{
-                      backgroundColor: isSelected ? opt.color : `${opt.color}15`,
-                      color: isSelected ? '#ffffff' : opt.color,
-                      borderColor: isSelected ? opt.color : 'transparent',
-                    }}
-                  >
-                    {opt.option_name} {Math.round(pct)}%
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* BARRA PROPORCIONAL PARA TODAS LAS OPCIONES */}
-            <div className="h-1.5 w-full rounded-full overflow-hidden flex">
-              {options.map((opt) => (
-                <div key={`bar-${opt.id}`} className="h-full transition-all duration-1000" style={{ width: `${totalVotesMulti === 0 ? (100 / options.length) : (Number(opt.total_votes) / totalVotesMulti) * 100}%`, backgroundColor: opt.color }} />
-              ))}
-            </div>
-            
-            {options.length > 4 && (
-              <div className="text-center pt-1">
-                <Link href={`/market/${id}`} className="text-xs font-semibold text-muted-foreground hover:text-primary transition-colors">
-                  Ver {options.length - 4} opciones más <ChevronRight className="w-3 h-3 inline" />
-                </Link>
-              </div>
+      <CardContent className="p-4 sm:p-5 flex flex-col flex-1">
+        <div className="flex gap-3 sm:gap-4 mb-4">
+          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 border border-primary/20 overflow-hidden shadow-sm">
+            {imageUrl ? (
+              <img src={imageUrl} alt="Market" className="w-full h-full object-cover" />
+            ) : (
+              <Coins className="w-5 h-5 sm:w-6 sm:h-6 text-primary opacity-50" />
             )}
           </div>
-
-          <div className="flex items-center justify-between text-xs text-muted-foreground mb-3">
-            <div className="flex items-center gap-1"><Coins className="w-3 h-3" /><span className="font-medium text-foreground">{totalVolume} pts</span></div>
-            <div className="flex items-center gap-1"><Clock className="w-3 h-3" /><span>{endDate}</span></div>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-bold text-base sm:text-lg leading-tight text-foreground group-hover:text-primary transition-colors line-clamp-3">
+              {truncateTitle(question, 80)}
+            </h3>
           </div>
+        </div>
 
-          <div className="flex items-center">
-            <Badge variant="outline" className={cn("text-xs font-medium", getCategoryColor(category))}>{category}</Badge>
-          </div>
-        </CardContent>
-
-        <CardFooter className="px-4 pb-4 pt-3 shrink-0 border-none">
-          <Button className="w-full group/btn" size="sm" disabled={!selectedOptionId} onClick={handlePredictClick}>
-            {selectedOptionId ? "Predecir" : "Seleccioná una opción"}
-            <ChevronRight className="w-4 h-4 ml-1 group-hover/btn:translate-x-1 transition-transform" />
-          </Button>
-        </CardFooter>
-      </Card>
-
-      <Dialog open={isBetModalOpen} onOpenChange={setIsBetModalOpen}>
-        {/* ... Modal idéntico al anterior ... */}
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Coins className="w-5 h-5 text-primary" /> Realizar Predicción</DialogTitle>
-            <DialogDescription>Estás apostando a <span className="font-semibold text-foreground">{selectedOptionName}</span> en esta predicción</DialogDescription>
-          </DialogHeader>
-          {betSuccess ? (
-            <div className="py-8 text-center animate-in fade-in zoom-in duration-300">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-500/20 flex items-center justify-center"><Coins className="w-8 h-8 text-green-500" /></div>
-              <h3 className="text-lg font-semibold mb-2 text-green-600 dark:text-green-400">¡Apuesta Realizada!</h3>
-              <p className="text-muted-foreground text-sm">Tu predicción fue registrada exitosamente</p>
-            </div>
-          ) : (
-            <div className="space-y-4 py-2">
-              <div className="p-3 rounded-lg bg-muted/50 text-sm flex gap-3 items-center">
-                {imageUrl && <img src={imageUrl} alt="Mercado" className="w-10 h-10 rounded-md object-cover shrink-0 border border-border/50" />}
-                <p className="font-medium text-foreground line-clamp-2">{question}</p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="betAmount">Cantidad de puntos</Label>
-                <Input id="betAmount" type="number" placeholder="Ej: 500" value={betAmount} onChange={(e) => setBetAmount(e.target.value)} min={1} max={userPoints} />
-                {userId && <p className="text-xs text-muted-foreground">Balance disponible: <span className="font-medium text-foreground">{(userPoints || 0).toLocaleString()}</span> pts</p>}
-              </div>
-              <div className="flex gap-2">
-                {[100, 500, 1000].map((amount) => (
-                  <Button key={amount} type="button" variant="outline" size="sm" onClick={() => setBetAmount(amount.toString())} disabled={amount > userPoints} className="flex-1">+{amount}</Button>
+        <div className="space-y-3 mb-4 flex-1">
+          {sortedOptions.length > 0 ? (
+            <>
+              {/* Progreso Visual ordenado */}
+              <div className="h-1.5 sm:h-2 w-full rounded-full bg-muted overflow-hidden flex shadow-inner">
+                {sortedOptions.map((opt) => (
+                  <div 
+                    key={opt.id} 
+                    className="h-full transition-all duration-500 ease-out" 
+                    style={{ width: `${getProbability(opt.total_votes)}%`, backgroundColor: opt.color }} 
+                  />
                 ))}
               </div>
-              <Button className="w-full" onClick={handlePlaceBet} disabled={isPlacingBet || !betAmount || !userId}>
-                {isPlacingBet ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Procesando...</> : <><Coins className="w-4 h-4 mr-2" /> Confirmar Apuesta</>}
-              </Button>
-            </div>
+              
+              {/* Opciones destacadas ordenadas (Muestra las 3 más altas) */}
+              <div className="flex flex-wrap gap-2 text-[10px] sm:text-xs">
+                {sortedOptions.slice(0, 3).map((opt) => (
+                  <div key={opt.id} className="flex items-center gap-1.5 px-2 py-1 rounded-md border border-border/50 bg-background/50 text-foreground">
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: opt.color }} />
+                    <span className="font-semibold truncate max-w-[80px] sm:max-w-[100px]">{opt.option_name}</span>
+                    <span className="font-black opacity-80">{Math.round(getProbability(opt.total_votes))}%</span>
+                  </div>
+                ))}
+                {sortedOptions.length > 3 && (
+                  <div className="flex items-center px-2 py-1 rounded-md border border-border/50 bg-background/50 text-muted-foreground text-[10px] sm:text-xs font-medium">
+                    +{sortedOptions.length - 3}
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+             <div className="h-2 w-full rounded-full bg-muted" />
           )}
-        </DialogContent>
-      </Dialog>
-    </>
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mt-auto pt-4 border-t border-border/50 gap-3 sm:gap-0">
+          <div className="flex items-center gap-3 w-full sm:w-auto overflow-hidden">
+            <Badge variant="secondary" className="shrink-0 text-[10px] sm:text-xs border-border/50 font-bold bg-muted/50 hover:bg-muted text-foreground px-2 py-0.5 uppercase tracking-wide capitalize">
+              {category}
+            </Badge>
+            <div className="flex items-center gap-3 text-muted-foreground text-[10px] sm:text-xs font-medium min-w-0">
+              <span className="flex items-center gap-1 shrink-0"><Coins className="w-3 h-3 sm:w-3.5 sm:h-3.5" />{totalVolume}</span>
+              <span className="flex items-center gap-1 truncate"><Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />{endDate}</span>
+            </div>
+          </div>
+          
+          <Button 
+            variant="default" 
+            size="sm" 
+            className="w-full sm:w-auto h-8 px-4 text-xs font-bold rounded-lg shadow-md hover:shadow-lg transition-all group-hover:bg-primary/90"
+            onClick={(e) => { e.stopPropagation(); handleNavigateToMarket(); }}
+          >
+            Predecir <ChevronRight className="w-3 h-3 ml-1" />
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
