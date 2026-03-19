@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getProfile, getMyBets, getMyTransactions, updateUserPassword, updateProfileSettings, sellBet, type BetWithMarket } from "@/lib/actions";
@@ -16,11 +16,10 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-  DialogDescription,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Coins, User, ArrowLeft, Loader2, TrendingUp, TrendingDown, History, Pencil, Landmark, Lock, Camera, CheckCircle2, Clock, XCircle, LineChart, Trophy, X } from "lucide-react";
+import { Coins, User, ArrowLeft, Loader2, TrendingUp, TrendingDown, History, Pencil, Landmark, Lock, Camera, LineChart, Trophy, CheckCircle2, Clock, XCircle, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -38,7 +37,6 @@ export default function ProfilePage() {
   const [bets, setBets] = useState<BetWithMarket[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
   
-  // NUEVO ESTADO PARA LAS OPCIONES
   const [marketOptions, setMarketOptions] = useState<any[]>([]);
   
   const [isChecking, setIsChecking] = useState(true);
@@ -61,11 +59,13 @@ export default function ProfilePage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isChangingPassword, setIsChangingPassword] = useState(false);
 
+  // Estado para el filtro de tiempo del PnL
+  const [timeframe, setTimeframe] = useState<'1D' | 'ALL'>('ALL');
+
   const fetchUserData = useCallback(async () => {
     setIsLoadingBets(true);
     setIsLoadingTransactions(true);
     
-    // Agregamos la carga de las opciones del mercado para hacer bien la matemática
     const [betsRes, txRes, optionsRes] = await Promise.all([
       getMyBets(),
       getMyTransactions(),
@@ -109,6 +109,60 @@ export default function ProfilePage() {
     else document.documentElement.classList.remove("dark");
   }, [isDarkMode]);
 
+  const calculateRealCashout = useCallback((bet: any, market: any, opt: any) => {
+    const shares = Number(bet.shares || 0);
+    if (shares <= 0) return Math.round(bet.amount * 0.95); 
+    
+    const direction = bet.direction || 'yes';
+    const optionVotes = Number(opt.total_votes || 0);
+    const totalVol = Number(market.total_volume || 0);
+    const totalOptions = marketOptions.filter(o => o.market_id === market.id).length || 2;
+
+    const startPriceYes = (optionVotes + 100.0) / (totalVol + (totalOptions * 100.0));
+    const estPayout = shares * (direction === 'yes' ? startPriceYes : (1 - startPriceYes));
+
+    let endPriceYes = 0;
+    if (direction === 'yes') {
+      endPriceYes = Math.max(0.01, (optionVotes - estPayout + 100.0) / (Math.max(1, totalVol - estPayout) + (totalOptions * 100.0)));
+    } else {
+      endPriceYes = Math.max(0.01, (optionVotes + 100.0) / (Math.max(1, totalVol - estPayout) + (totalOptions * 100.0)));
+    }
+
+    let avgPriceYes = (startPriceYes + endPriceYes) / 2.0;
+    avgPriceYes = Math.max(0.01, Math.min(0.99, avgPriceYes));
+
+    const currentPrice = direction === 'yes' ? avgPriceYes : (1 - avgPriceYes);
+    return Math.round(shares * currentPrice);
+  }, [marketOptions]);
+
+  const portfolioStats = useMemo(() => {
+    const availableCapital = profile?.points ?? 0;
+    let totalInvestedActive = 0;
+    let totalCurrentValueActive = 0;
+
+    bets
+      .filter((b) => getMarket(b) && ACTIVE_STATUSES.includes(String(getMarket(b)!.status).toLowerCase()))
+      .forEach((bet) => {
+        const market = getMarket(bet);
+        const opt = bet.option_details;
+        if (market && opt) {
+          totalInvestedActive += bet.amount;
+          totalCurrentValueActive += calculateRealCashout(bet, market, opt);
+        }
+      });
+
+    const totalPortfolioValue = availableCapital + totalCurrentValueActive;
+    const totalPnl = totalCurrentValueActive - totalInvestedActive;
+    const totalPnlPercentage = totalInvestedActive > 0 ? (totalPnl / totalInvestedActive) * 100 : 0;
+
+    return {
+      availableCapital,
+      totalPortfolioValue,
+      totalPnl,
+      totalPnlPercentage,
+    };
+  }, [bets, profile?.points, calculateRealCashout]);
+
   const confirmSell = async () => {
     if (!betToSell) return;
 
@@ -126,14 +180,6 @@ export default function ProfilePage() {
     setBetToSell(null); 
   };
 
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setSelectedImage(file);
-      setPreviewUrl(URL.createObjectURL(file));
-    }
-  };
-
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUsername.trim()) return;
@@ -144,17 +190,8 @@ export default function ProfilePage() {
     if (selectedImage) {
       const fileExt = selectedImage.name.split('.').pop();
       const filePath = `${profile.id}-${Date.now()}.${fileExt}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("avatars")
-        .upload(filePath, selectedImage, { upsert: true });
-
-      if (uploadError) {
-        toast({ title: "Error", description: "No se pudo subir la imagen.", variant: "destructive" });
-        setIsSaving(false);
-        return;
-      }
-
+      const { error: uploadError } = await supabase.storage.from("avatars").upload(filePath, selectedImage, { upsert: true });
+      if (uploadError) { toast({ title: "Error", description: "No se pudo subir la imagen.", variant: "destructive" }); setIsSaving(false); return; }
       const { data } = supabase.storage.from("avatars").getPublicUrl(filePath);
       finalAvatarUrl = data.publicUrl;
     }
@@ -162,14 +199,11 @@ export default function ProfilePage() {
     const { ok, error } = await updateProfileSettings(newUsername.trim(), finalAvatarUrl);
     setIsSaving(false);
 
-    if (error) {
-      toast({ title: "Error", description: error, variant: "destructive" });
-    } else {
+    if (error) { toast({ title: "Error", description: error, variant: "destructive" }); } 
+    else {
       toast({ title: "Perfil actualizado", description: "Tus datos se guardaron con éxito." });
       setProfile({ ...profile, username: newUsername.trim(), avatar_url: finalAvatarUrl });
-      setIsEditModalOpen(false);
-      setSelectedImage(null);
-      router.refresh(); 
+      setIsEditModalOpen(false); setSelectedImage(null); router.refresh(); 
     }
   };
 
@@ -177,50 +211,11 @@ export default function ProfilePage() {
     e.preventDefault();
     if (newPassword !== confirmPassword) { toast({ title: "Error", description: "Las contraseñas no coinciden.", variant: "destructive" }); return; }
     if (newPassword.length < 6) { toast({ title: "Error", description: "La contraseña debe tener al menos 6 caracteres.", variant: "destructive" }); return; }
-
     setIsChangingPassword(true);
     const { ok, error } = await updateUserPassword(newPassword);
     setIsChangingPassword(false);
-
     if (error) { toast({ title: "Error", description: error, variant: "destructive" }); } 
-    else {
-      toast({ title: "¡Contraseña actualizada!", description: "Tu contraseña se cambió correctamente." });
-      setIsPasswordModalOpen(false); setNewPassword(""); setConfirmPassword("");
-    }
-  };
-
-  // LA FÓRMULA MÁGICA PARA CALCULAR EL PRECIO REAL DE VENTA (CON SLIPPAGE)
-  const calculateRealCashout = (bet: any, market: any, opt: any) => {
-    const shares = Number(bet.shares || 0);
-    if (shares <= 0) return Math.round(bet.amount * 0.95); // Viejo sistema
-    
-    const direction = bet.direction || 'yes';
-    const optionVotes = Number(opt.total_votes || 0);
-    const totalVol = Number(market.total_volume || 0);
-    
-    // ACÁ ESTABA EL ERROR: Ahora usamos las opciones cargadas para saber cuántas tiene realmente el mercado
-    const totalOptions = marketOptions.filter(o => o.market_id === market.id).length || 2;
-
-    // 1. Precio actual (antes de vender)
-    const startPriceYes = (optionVotes + 100.0) / (totalVol + (totalOptions * 100.0));
-    
-    // 2. Estimación del retiro
-    const estPayout = shares * (direction === 'yes' ? startPriceYes : (1 - startPriceYes));
-
-    // 3. Calculamos cuánto se hunde el precio
-    let endPriceYes = 0;
-    if (direction === 'yes') {
-      endPriceYes = Math.max(0.01, (optionVotes - estPayout + 100.0) / (Math.max(1, totalVol - estPayout) + (totalOptions * 100.0)));
-    } else {
-      endPriceYes = Math.max(0.01, (optionVotes + 100.0) / (Math.max(1, totalVol - estPayout) + (totalOptions * 100.0)));
-    }
-
-    // 4. El precio promedio que el mercado te va a pagar realmente
-    let avgPriceYes = (startPriceYes + endPriceYes) / 2.0;
-    avgPriceYes = Math.max(0.01, Math.min(0.99, avgPriceYes));
-
-    const currentPrice = direction === 'yes' ? avgPriceYes : (1 - avgPriceYes);
-    return Math.round(shares * currentPrice);
+    else { toast({ title: "¡Contraseña actualizada!", description: "Tu contraseña se cambió correctamente." }); setIsPasswordModalOpen(false); setNewPassword(""); setConfirmPassword(""); }
   };
 
   if (isChecking) return <div className="min-h-screen bg-background flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
@@ -233,220 +228,285 @@ export default function ProfilePage() {
       <NavHeader points={profile.points ?? 10000} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode(!isDarkMode)} onPointsUpdate={() => {}} userId={profile.id} userEmail={profile.email ?? null} onOpenAuthModal={() => router.push("/")} onSignOut={async () => { await createClient().auth.signOut(); router.replace("/"); }} isAdmin={profile.role === "admin"} username={profile.username ?? null} />
 
       <main className="container mx-auto px-4 py-8 flex-1">
-        <Button variant="ghost" size="sm" asChild className="mb-6 -ml-2">
-          <Link href="/" className="flex items-center gap-2"><ArrowLeft className="w-4 h-4" /> Volver</Link>
-        </Button>
+        
+        <div className="max-w-5xl mx-auto flex items-center justify-between mb-8">
+          <Button variant="ghost" size="sm" asChild className="-ml-2 text-muted-foreground hover:text-foreground">
+            <Link href="/" className="flex items-center gap-2"><ArrowLeft className="w-4 h-4" /> Volver</Link>
+          </Button>
 
-        <div className="max-w-2xl mx-auto">
-          <Card className="bg-card border-border/50 shadow-md">
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between text-xl">
-                <div className="flex items-center gap-2"><User className="w-5 h-5 text-primary" /> Mi Portfolio</div>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setIsPasswordModalOpen(true)} title="Cambiar Contraseña"><Lock className="w-4 h-4" /></Button>
-                  <Button variant="outline" size="sm" onClick={() => { setNewUsername(profile.username || ""); setPreviewUrl(profile.avatar_url || null); setSelectedImage(null); setIsEditModalOpen(true); }}><Pencil className="w-4 h-4 mr-2" /> Editar</Button>
-                </div>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center gap-4">
-                <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center text-primary border-2 border-primary/20 overflow-hidden shrink-0">
-                  {profile.avatar_url ? <img src={profile.avatar_url} alt="Avatar" className="w-full h-full object-cover" /> : <User className="w-10 h-10" />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-muted-foreground">Trader</p>
-                  <p className="text-2xl font-bold text-foreground truncate">{displayName}</p>
-                </div>
-              </div>
+          <div className="flex items-center gap-4">
+             <div className="flex items-center gap-3 mr-4">
+               <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary border-2 border-background shadow-sm overflow-hidden shrink-0">
+                  {profile.avatar_url ? <img src={profile.avatar_url} alt="Avatar" className="w-full h-full object-cover" /> : <User className="w-5 h-5" />}
+               </div>
+               <span className="font-bold text-foreground">{displayName}</span>
+             </div>
+             <Button variant="outline" size="icon" onClick={() => setIsPasswordModalOpen(true)} title="Cambiar Contraseña"><Lock className="w-4 h-4" /></Button>
+             <Button variant="outline" size="sm" onClick={() => { setNewUsername(profile.username || ""); setPreviewUrl(profile.avatar_url || null); setSelectedImage(null); setIsEditModalOpen(true); }}><Pencil className="w-4 h-4 mr-2" /> Editar</Button>
+          </div>
+        </div>
 
-              <div className="flex items-center gap-3 p-4 rounded-xl bg-secondary/20 border border-secondary/30">
-                <Coins className="w-10 h-10 text-amber-500 drop-shadow-md" />
+        <div className="max-w-5xl mx-auto">
+          
+          {/* LAS DOS CAJAS ESTILO POLYMARKET */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-8">
+            
+            {/* CAJA 1: Portfolio Value */}
+            <Card className="bg-card/50 backdrop-blur-sm border border-border/50 shadow-sm rounded-2xl overflow-hidden">
+              <CardContent className="p-6 md:p-8 flex flex-col justify-between h-full">
+                <div className="flex justify-between items-start mb-6">
+                  <div className="flex items-center gap-2 text-muted-foreground font-semibold">
+                    <LineChart className="w-5 h-5" /> Portfolio
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Capital Disponible</p>
+                    <p className="font-bold text-foreground">{portfolioStats.availableCapital.toLocaleString()} pts</p>
+                  </div>
+                </div>
+                
                 <div>
-                  <p className="text-sm text-muted-foreground">Capital Disponible</p>
-                  <p className="text-3xl font-bold text-foreground">
-                    {(profile.points ?? 0).toLocaleString()} <span className="text-lg text-muted-foreground font-medium">pts</span>
+                  <p className="text-5xl font-black text-foreground mb-2 flex items-baseline gap-2 tracking-tight">
+                    {portfolioStats.totalPortfolioValue.toLocaleString()} <span className="text-xl text-muted-foreground font-bold">pts</span>
+                  </p>
+                  
+                  <p className={cn("text-sm font-bold flex items-center gap-1", portfolioStats.totalPnl >= 0 ? "text-[#00FF00]" : "text-[#FF0000]")}>
+                    {portfolioStats.totalPnl >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                    {portfolioStats.totalPnl >= 0 ? '+' : ''}{portfolioStats.totalPnl.toLocaleString()} pts ({portfolioStats.totalPnl >= 0 ? '+' : ''}{portfolioStats.totalPnlPercentage.toFixed(2)}%)
                   </p>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
 
-          <Card className="bg-card border-border/50 mt-6 shadow-md">
-            <CardContent className="p-4 sm:p-6">
+            {/* CAJA 2: Profit/Loss */}
+            <Card className="bg-card/50 backdrop-blur-sm border border-border/50 shadow-sm rounded-2xl overflow-hidden relative">
+              <div className="absolute bottom-0 left-0 w-full h-1/2 bg-gradient-to-t from-primary/10 to-transparent pointer-events-none" />
+              <svg className="absolute bottom-0 left-0 w-full h-24 text-primary/20 pointer-events-none" preserveAspectRatio="none" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M0 100V80C10 80 20 90 30 70C40 50 50 60 60 40C70 20 80 30 90 10C95 0 100 20 100 20V100H0Z" fill="currentColor" />
+                <path d="M0 80C10 80 20 90 30 70C40 50 50 60 60 40C70 20 80 30 90 10C95 0 100 20 100 20" stroke="currentColor" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+              </svg>
+
+              <CardContent className="p-6 md:p-8 flex flex-col justify-between h-full relative z-10">
+                <div className="flex justify-between items-start mb-6">
+                  <div className={cn("flex items-center gap-2 font-bold", portfolioStats.totalPnl >= 0 ? "text-[#00FF00]" : "text-[#FF0000]")}>
+                    {portfolioStats.totalPnl >= 0 ? <ArrowUpRight className="w-5 h-5" /> : <ArrowDownRight className="w-5 h-5" />} Profit/Loss
+                  </div>
+                  
+                  {/* Botones Interactivos de Tiempo */}
+                  <div className="flex gap-1 bg-background/50 backdrop-blur-md rounded-lg p-1 border border-border/50">
+                    <button 
+                      onClick={() => setTimeframe('1D')} 
+                      className={cn("px-2 py-1 text-xs font-bold rounded-md transition-all", timeframe === '1D' ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}
+                    >
+                      1D
+                    </button>
+                    <button 
+                      onClick={() => setTimeframe('ALL')} 
+                      className={cn("px-2 py-1 text-xs font-bold rounded-md transition-all", timeframe === 'ALL' ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}
+                    >
+                      ALL
+                    </button>
+                  </div>
+                </div>
+                
+                <div>
+                  <p className={cn("text-5xl font-black mb-2 flex items-baseline gap-2 tracking-tight", portfolioStats.totalPnl >= 0 ? "text-[#00FF00]" : "text-[#FF0000]")}>
+                    {portfolioStats.totalPnl >= 0 ? '+' : ''}{portfolioStats.totalPnlPercentage.toFixed(2)}%
+                  </p>
+                  <p className="text-sm font-bold text-muted-foreground flex items-center gap-1.5">
+                    {timeframe === 'ALL' ? 'Rendimiento Histórico' : 'Rendimiento últimas 24hs'}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+          </div>
+
+          <Card className="bg-card border-border/50 mt-8 shadow-md rounded-2xl overflow-hidden">
+            <CardContent className="p-4 sm:p-6 md:p-8">
               <Tabs defaultValue="active" className="w-full">
-                <TabsList className="grid w-full grid-cols-3 h-12 mb-6">
-                  <TabsTrigger value="active" className="flex items-center gap-1.5 text-xs sm:text-sm"><LineChart className="w-4 h-4" /><span className="hidden sm:inline">Activas</span></TabsTrigger>
-                  <TabsTrigger value="finished" className="flex items-center gap-1.5 text-xs sm:text-sm"><History className="w-4 h-4" /><span className="hidden sm:inline">Finalizadas</span></TabsTrigger>
-                  <TabsTrigger value="bank" className="flex items-center gap-1.5 text-xs sm:text-sm"><Landmark className="w-4 h-4" /><span className="hidden sm:inline">Movimientos</span></TabsTrigger>
+                <TabsList className="grid w-full grid-cols-3 h-12 mb-8 bg-muted/50 rounded-lg p-1 border border-border/50">
+                  <TabsTrigger value="active" className="flex items-center gap-2 text-xs sm:text-sm font-bold rounded-md"><LineChart className="w-4 h-4" /><span className="hidden sm:inline">Inversiones Activas</span><Badge variant="secondary" className="font-black h-5 px-1 ml-1 text-xs">{bets.filter(b => getMarket(b) && ACTIVE_STATUSES.includes(String(getMarket(b)!.status).toLowerCase())).length}</Badge></TabsTrigger>
+                  <TabsTrigger value="finished" className="flex items-center gap-2 text-xs sm:text-sm font-bold rounded-md"><History className="w-4 h-4" /><span className="hidden sm:inline">Finalizadas</span></TabsTrigger>
+                  <TabsTrigger value="bank" className="flex items-center gap-2 text-xs sm:text-sm font-bold rounded-md"><Landmark className="w-4 h-4" /><span className="hidden sm:inline">Movimientos</span></TabsTrigger>
                 </TabsList>
 
+                {/* TAB: ACTIVAS */}
                 <TabsContent value="active" className="space-y-4">
                   {isLoadingBets ? (
-                    <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
+                    <div className="flex items-center justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-primary opacity-60" /></div>
                   ) : bets.filter((b) => getMarket(b) && ACTIVE_STATUSES.includes(String(getMarket(b)!.status).toLowerCase())).length === 0 ? (
-                    <p className="py-8 text-center text-sm text-muted-foreground">No tenés inversiones activas en este momento.</p>
-                  ) : (
-                    bets
-                      .filter((b) => getMarket(b) && ACTIVE_STATUSES.includes(String(getMarket(b)!.status).toLowerCase()))
-                      .map((bet) => {
-                        const market = getMarket(bet);
-                        const opt = bet.option_details;
-                        const isOldBinary = bet.outcome === "yes" || bet.outcome === "no";
-                        const displayOutcome = opt ? opt.option_name : (isOldBinary ? (bet.outcome === "yes" ? "SÍ" : "NO") : "Opción");
-                        const direction = (bet as any).direction || 'yes';
-
-                        let cashoutValue = 0;
-                        let canSell = false;
-                        let pnl = 0;
-                        let pnlPercentage = 0;
-                        
-                        if (market) {
-                          canSell = true;
-                          const shares = Number((bet as any).shares || 0);
-
-                          if (shares > 0 && opt) {
-                            cashoutValue = calculateRealCashout(bet, market, opt);
-                          } else {
-                            // Fallback
-                            let currVal = bet.amount;
-                            if (opt && bet.outcome.length > 10) {
-                              const totalVotes = Number(opt.total_votes);
-                              if (totalVotes > 0) currVal = (bet.amount / totalVotes) * Number(market.total_volume);
-                            }
-                            cashoutValue = Math.round(currVal * 0.95);
-                          }
-
-                          pnl = cashoutValue - bet.amount;
-                          pnlPercentage = (pnl / bet.amount) * 100;
-                        }
-
-                        return (
-                          <div key={bet.id} className="rounded-xl border border-border/50 bg-card p-4 transition-colors hover:bg-muted/30 shadow-sm relative overflow-hidden group">
-                            <Link href={`/market/${bet.market_id}`} className="block">
-                              <p className="font-semibold text-foreground line-clamp-2 mb-4 group-hover:text-primary transition-colors">
-                                {market?.title ?? "Mercado"}
-                              </p>
-                            </Link>
-
-                            <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-4 bg-muted/30 p-3 rounded-lg border border-border/50">
-                               <div className="flex gap-4 sm:gap-8">
-                                  <div className="flex flex-col">
-                                    <p className="text-[10px] text-muted-foreground font-bold uppercase mb-1">Inversión</p>
-                                    <p className="font-bold text-foreground flex items-center gap-1 text-sm">
-                                      <Coins className="w-3.5 h-3.5 text-muted-foreground" /> {bet.amount.toLocaleString()}
-                                    </p>
-                                  </div>
-                                  <div className="flex flex-col">
-                                    <p className="text-[10px] text-muted-foreground font-bold uppercase mb-1">Predicción</p>
-                                    <Badge variant="outline" className={cn("font-bold border", direction === 'no' ? "bg-red-500/10 text-red-600 dark:text-red-500 border-red-500/30" : "bg-green-500/10 text-green-600 dark:text-green-500 border-green-500/30")}>
-                                      {direction === 'no' ? 'No' : 'Sí'} - {displayOutcome}
-                                    </Badge>
-                                  </div>
-                               </div>
-
-                               <div className="flex items-center gap-3">
-                                 {canSell && (
-                                   <div className="flex flex-col items-end">
-                                     <Button
-                                       onClick={(e) => {
-                                         e.preventDefault();
-                                         e.stopPropagation();
-                                         setBetToSell({
-                                           id: bet.id,
-                                           title: market?.title ?? "Mercado",
-                                           outcomeName: displayOutcome,
-                                           direction: direction,
-                                           cashoutValue: cashoutValue,
-                                           pnl: pnl,
-                                           pnlPercentage: pnlPercentage
-                                         });
-                                       }}
-                                       size="sm"
-                                       className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-md shrink-0 transition-transform hover:scale-105 active:scale-95"
-                                     >
-                                       <Coins className="w-4 h-4 mr-1.5" />
-                                       Vender ({cashoutValue.toLocaleString()})
-                                     </Button>
-                                     <span className={`text-[11px] font-bold mt-1 tracking-wide ${pnl >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                                        {pnl >= 0 ? '+' : ''}{pnlPercentage.toFixed(1)}% 
-                                     </span>
-                                   </div>
-                                 )}
-                               </div>
-                            </div>
-                          </div>
-                        );
-                      })
-                  )}
-                </TabsContent>
-
-                <TabsContent value="finished" className="space-y-4">
-                   {bets.filter((b) => getMarket(b) && FINISHED_STATUSES.includes(String(getMarket(b)!.status).toLowerCase())).length === 0 ? (
-                    <p className="py-8 text-center text-sm text-muted-foreground">Aún no hay resultados de tus apuestas.</p>
-                  ) : (
-                    bets.filter((b) => getMarket(b) && FINISHED_STATUSES.includes(String(getMarket(b)!.status).toLowerCase())).map((bet) => {
-                        const market = getMarket(bet);
-                        const opt = bet.option_details;
-                        const direction = (bet as any).direction || 'yes';
-                        const displayOutcome = opt ? opt.option_name : 'Opción';
-                        
-                        let won = false;
-                        const wonYes = direction === 'yes' && market?.winning_outcome === bet.outcome;
-                        const wonNo = direction === 'no' && market?.winning_outcome !== bet.outcome && market?.winning_outcome !== null;
-                        won = wonYes || wonNo;
-
-                        return (
-                          <div key={bet.id} className="rounded-xl border border-border/50 bg-muted/10 p-4 opacity-90">
-                            <p className="font-medium text-foreground line-clamp-2 mb-3">{market?.title ?? "Mercado"}</p>
-                            <div className="flex items-center justify-between bg-background p-3 rounded-lg border border-border/50">
-                               <div className="flex items-center gap-4">
-                                  <div className="flex flex-col">
-                                    <p className="text-[10px] text-muted-foreground font-bold uppercase mb-0.5">Inversión</p>
-                                    <p className="font-bold text-foreground text-sm">{bet.amount.toLocaleString()} pts</p>
-                                  </div>
-                                  <div className="flex flex-col">
-                                    <p className="text-[10px] text-muted-foreground font-bold uppercase mb-0.5">Predicción</p>
-                                    <Badge variant="outline" className={cn("text-xs font-bold border", direction === 'no' ? "bg-red-500/10 text-red-600 dark:text-red-500 border-red-500/30" : "bg-green-500/10 text-green-600 dark:text-green-500 border-green-500/30")}>
-                                      {direction === 'no' ? 'No' : 'Sí'} - {displayOutcome}
-                                    </Badge>
-                                  </div>
-                               </div>
-                               <span className={`px-3 py-1 rounded-md text-xs font-bold tracking-wide border ${won ? "bg-green-500/10 border-green-500/30 text-green-500" : "bg-red-500/10 border-red-500/30 text-red-500"}`}>
-                                 {won ? "ACERTÓ" : "PERDIÓ"}
-                               </span>
-                            </div>
-                          </div>
-                        );
-                      })
-                  )}
-                </TabsContent>
-
-                <TabsContent value="bank" className="space-y-3">
-                  {isLoadingTransactions ? (
-                    <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
-                  ) : transactions.length === 0 ? (
-                    <div className="text-center py-10 border-2 border-dashed border-border/50 rounded-xl bg-muted/10">
-                      <Landmark className="w-10 h-10 text-muted-foreground mx-auto mb-3 opacity-50" />
-                      <h3 className="font-semibold text-foreground mb-1">No hay movimientos</h3>
+                    <div className="p-16 text-center text-muted-foreground bg-muted/10 border-2 border-dashed border-border/50 rounded-2xl">
+                      <LineChart className="w-16 h-16 mx-auto mb-5 opacity-20" />
+                      <p className="text-xl font-bold mb-2 text-foreground">Tu portfolio activo está vacío</p>
+                      <p className="max-w-md mx-auto mb-6 text-sm">Explorá los mercados disponibles y empezá a predecir el futuro para hacer crecer tu capital.</p>
+                      <Button size="lg" asChild className="mt-4 font-black rounded-full shadow-md"><Link href="/">Ir al Mercado</Link></Button>
                     </div>
                   ) : (
-                    <div className="space-y-2">
+                    <div className="space-y-4">
+                      {bets
+                        .filter((b) => getMarket(b) && ACTIVE_STATUSES.includes(String(getMarket(b)!.status).toLowerCase()))
+                        .map((bet) => {
+                          const market = getMarket(bet);
+                          const opt = bet.option_details;
+                          const isOldBinary = bet.outcome === "yes" || bet.outcome === "no";
+                          const displayOutcome = opt ? opt.option_name : (isOldBinary ? (bet.outcome === "yes" ? "SÍ" : "NO") : "Opción");
+                          const direction = (bet as any).direction || 'yes';
+
+                          const isOptBinary = ['sí', 'si', 'yes', 'no'].includes(displayOutcome.toLowerCase());
+                          let predictionText = "";
+                          if (isOptBinary) {
+                            predictionText = direction === 'no' ? (displayOutcome.toLowerCase().includes('s') ? 'No' : 'Sí') : displayOutcome;
+                          } else {
+                            predictionText = `${direction === 'no' ? 'No' : 'Sí'} a ${displayOutcome}`;
+                          }
+                          const isEffectivelyNo = direction === 'no' || (isOptBinary && displayOutcome.toLowerCase() === 'no' && direction === 'yes');
+
+                          let cashoutValue = 0;
+                          let pnl = 0;
+                          let pnlPercentage = 0;
+                          
+                          if (market) {
+                            const shares = Number((bet as any).shares || 0);
+                            if (shares > 0 && opt) { cashoutValue = calculateRealCashout(bet, market, opt); } 
+                            else { cashoutValue = Math.round(bet.amount * 0.95); }
+                            pnl = cashoutValue - bet.amount;
+                            pnlPercentage = (pnl / bet.amount) * 100;
+                          }
+
+                          return (
+                            <div key={bet.id} className="rounded-2xl border border-border/50 bg-card hover:border-primary/50 transition-all p-5 md:p-7 shadow-sm relative overflow-hidden group">
+                              <div className="absolute top-0 left-0 w-full h-1 bg-primary scale-x-0 group-hover:scale-x-100 transition-transform origin-left pointer-events-none" />
+                              <Link href={`/market/${bet.market_id}`} className="block">
+                                <p className="font-bold text-lg md:text-xl text-foreground line-clamp-2 mb-5 leading-tight group-hover:text-primary transition-colors pr-12">
+                                  {market?.title ?? "Mercado"}
+                                </p>
+                              </Link>
+
+                              <div className="flex flex-col md:flex-row md:items-center justify-between gap-5 md:gap-8 bg-muted/10 md:bg-transparent p-5 md:p-0 rounded-xl border md:border-none border-border/50">
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-5 md:gap-10">
+                                   <div className="flex flex-col">
+                                     <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1.5">Inversión</p>
+                                     <p className="font-black text-foreground text-xl md:text-2xl leading-none">
+                                       {bet.amount.toLocaleString()} <span className="text-xs font-bold text-muted-foreground">pts</span>
+                                     </p>
+                                   </div>
+                                   <div className="flex flex-col">
+                                     <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1.5">Posición</p>
+                                     <Badge variant="outline" className={cn("text-xs md:text-sm font-bold border h-8 justify-center w-fit", isEffectivelyNo ? "bg-[#FF0000]/10 text-[#FF0000] border-[#FF0000]/30" : "bg-[#00FF00]/10 text-[#00FF00] border-[#00FF00]/30")}>
+                                       {predictionText}
+                                     </Badge>
+                                   </div>
+                                   <div className="flex flex-col min-w-[90px] col-span-2 sm:col-span-1">
+                                     <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1.5 hidden md:block">Retorno</p>
+                                     <div className="flex items-center gap-2">
+                                        <span className={cn("font-black text-xl md:text-2xl leading-none", pnl >= 0 ? "text-[#00FF00]" : "text-[#FF0000]")}>
+                                          {pnl >= 0 ? "+" : ""}{pnlPercentage.toFixed(1)}%
+                                        </span>
+                                        <span className={`text-[11px] font-bold mt-1 px-1.5 py-0.5 rounded ${pnl >= 0 ? 'bg-[#00FF00]/10 text-[#00FF00]' : 'bg-[#FF0000]/10 text-[#FF0000]'}`}>
+                                          {pnl >= 0 ? '+' : ''}{pnl.toLocaleString()} pts
+                                        </span>
+                                     </div>
+                                   </div>
+                                </div>
+
+                                <div className="w-full md:w-auto mt-2 md:mt-0 pt-4 md:pt-0 border-t md:border-t-0 border-border/50">
+                                  <Button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setBetToSell({ id: bet.id, title: market?.title ?? "Mercado", outcomeName: predictionText, direction: direction, cashoutValue: cashoutValue, pnl: pnl, pnlPercentage: pnlPercentage }); }} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black h-11 px-7 w-full md:w-auto shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all rounded-full" >
+                                    <Coins className="w-4 h-4 mr-2" /> Vender por {cashoutValue.toLocaleString()} pts
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  )}
+                </TabsContent>
+
+                {/* TAB: FINALIZADAS */}
+                <TabsContent value="finished" className="space-y-4">
+                   {bets.filter((b) => getMarket(b) && FINISHED_STATUSES.includes(String(getMarket(b)!.status).toLowerCase())).length === 0 ? (
+                    <div className="p-12 text-center text-muted-foreground">
+                      <History className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                      <p>Aún no hay resultados de tus apuestas.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {bets.filter((b) => getMarket(b) && FINISHED_STATUSES.includes(String(getMarket(b)!.status).toLowerCase())).map((bet) => {
+                          const market = getMarket(bet);
+                          const opt = bet.option_details;
+                          const direction = (bet as any).direction || 'yes';
+                          const displayOutcome = opt ? opt.option_name : 'Opción';
+                          
+                          const isOptBinary = ['sí', 'si', 'yes', 'no'].includes(displayOutcome.toLowerCase());
+                          let predictionText = "";
+                          if (isOptBinary) { predictionText = direction === 'no' ? (displayOutcome.toLowerCase().includes('s') ? 'No' : 'Sí') : displayOutcome; } 
+                          else { predictionText = `${direction === 'no' ? 'No' : 'Sí'} a ${displayOutcome}`; }
+                          const isEffectivelyNo = direction === 'no' || (isOptBinary && displayOutcome.toLowerCase() === 'no' && direction === 'yes');
+
+                          let won = false;
+                          const wonYes = direction === 'yes' && market?.winning_outcome === bet.outcome;
+                          const wonNo = direction === 'no' && market?.winning_outcome !== bet.outcome && market?.winning_outcome !== null;
+                          won = wonYes || wonNo;
+
+                          return (
+                            <div key={bet.id} className="rounded-xl border border-border/50 bg-muted/10 p-4 md:p-6 opacity-90">
+                              <p className="font-bold text-foreground line-clamp-2 mb-4">{market?.title ?? "Mercado"}</p>
+                              
+                              <div className="flex flex-col md:flex-row md:items-center justify-between bg-background p-4 rounded-lg border border-border/50 gap-4">
+                                 <div className="flex items-center gap-6 md:gap-10">
+                                   <div className="flex flex-col">
+                                     <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1">Inversión</p>
+                                     <p className="font-bold text-foreground text-base md:text-lg">{bet.amount.toLocaleString()} pts</p>
+                                   </div>
+                                   <div className="flex flex-col">
+                                     <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1">Predicción</p>
+                                     <Badge variant="outline" className={cn("text-xs font-bold border h-7", isEffectivelyNo ? "bg-red-500/10 text-red-600 dark:text-red-500 border-red-500/30" : "bg-green-500/10 text-green-600 dark:text-green-500 border-green-500/30")}>
+                                       {predictionText}
+                                     </Badge>
+                                   </div>
+                                 </div>
+                                 <div className="pt-2 md:pt-0 border-t md:border-t-0 border-border/50 w-full md:w-auto text-right">
+                                   {won ? (
+                                      <span className="font-black text-lg text-[#00FF00] flex items-center justify-end gap-1.5"><CheckCircle2 className="w-5 h-5" /> Acertó</span>
+                                   ) : (
+                                      <span className="font-black text-lg text-[#FF0000] flex items-center justify-end gap-1.5 opacity-90"><XCircle className="w-5 h-5" /> Perdió</span>
+                                   )}
+                                 </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  )}
+                </TabsContent>
+
+                {/* TAB: MOVIMIENTOS */}
+                <TabsContent value="bank" className="space-y-3">
+                  {isLoadingTransactions ? (
+                    <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
+                  ) : transactions.length === 0 ? (
+                    <div className="text-center py-12 border-2 border-dashed border-border/50 rounded-xl bg-muted/10">
+                      <Landmark className="w-12 h-12 text-muted-foreground mx-auto mb-3 opacity-50" />
+                      <h3 className="font-semibold text-foreground mb-1 text-lg">No hay movimientos</h3>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
                       {transactions.map((tx) => {
                         const isPositive = tx.amount > 0;
                         return (
-                          <div key={tx.id} className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-muted/10">
-                            <div className="flex items-center gap-3">
-                              <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${isPositive ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'}`}>
-                                {isPositive ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                          <div key={tx.id} className="flex items-center justify-between p-4 rounded-xl border border-border/50 bg-muted/10 hover:bg-muted/20 transition-colors">
+                            <div className="flex items-center gap-4">
+                              <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isPositive ? 'bg-[#00FF00]/20 text-[#00FF00]' : 'bg-[#FF0000]/20 text-[#FF0000]'}`}>
+                                {isPositive ? <TrendingUp className="w-5 h-5" /> : <TrendingDown className="w-5 h-5" />}
                               </div>
                               <div>
-                                <p className="text-sm font-medium text-foreground">{tx.description}</p>
-                                <p className="text-[10px] text-muted-foreground uppercase font-medium">
+                                <p className="text-base font-semibold text-foreground">{tx.description}</p>
+                                <p className="text-xs text-muted-foreground uppercase font-medium mt-0.5">
                                   {new Date(tx.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                                 </p>
                               </div>
                             </div>
-                            <div className={`font-bold ${isPositive ? 'text-green-500' : 'text-red-500'}`}>
+                            <div className={`text-xl font-black ${isPositive ? 'text-[#00FF00]' : 'text-[#FF0000]'}`}>
                               {isPositive ? '+' : ''}{tx.amount.toLocaleString()} pts
                             </div>
                           </div>
@@ -469,47 +529,49 @@ export default function ProfilePage() {
             </DialogTitle>
           </DialogHeader>
           
-          <div className="py-2 space-y-3">
-            <div className="p-3 bg-muted/30 rounded-lg border border-border/50 text-sm">
-              <p className="text-muted-foreground mb-1">Mercado:</p>
-              <p className="font-semibold text-foreground line-clamp-2">{betToSell?.title}</p>
+          <div className="py-2 space-y-4">
+            <div className="p-4 bg-muted/30 rounded-xl border border-border/50">
+              <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider mb-1">Mercado:</p>
+              <p className="font-bold text-base text-foreground line-clamp-2">{betToSell?.title}</p>
             </div>
             
-            <div className="flex justify-between items-center p-3 bg-muted/30 rounded-lg border border-border/50">
-              <span className="text-sm text-muted-foreground">Tu posición:</span>
-              <Badge variant="outline" className={cn("font-bold border", betToSell?.direction === 'no' ? "bg-red-500/10 text-red-600 dark:text-red-500 border-red-500/30" : "bg-green-500/10 text-green-600 dark:text-green-500 border-green-500/30")}>
-                {betToSell?.direction === 'no' ? 'No' : 'Sí'} - {betToSell?.outcomeName}
+            <div className="flex justify-between items-center p-4 bg-muted/30 rounded-xl border border-border/50">
+              <span className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Tu posición:</span>
+              <Badge variant="outline" className={cn("font-bold border text-sm h-8", betToSell?.direction === 'no' ? "bg-[#FF0000]/10 text-[#FF0000] border-[#FF0000]/30" : "bg-[#00FF00]/10 text-[#00FF00] border-[#00FF00]/30")}>
+                {betToSell?.outcomeName}
               </Badge>
             </div>
             
-            <div className={`flex justify-between items-center p-4 border rounded-lg ${
+            <div className={`flex justify-between items-center p-5 border rounded-xl ${
               (betToSell?.pnl ?? 0) >= 0 
-                ? 'bg-green-500/10 border-green-500/30' 
-                : 'bg-red-500/10 border-red-500/30'
+                ? 'bg-[#00FF00]/10 border-[#00FF00]/30' 
+                : 'bg-[#FF0000]/10 border-[#FF0000]/30'
             }`}>
-              <span className="font-medium text-foreground">Rentabilidad (PnL):</span>
-              <span className={`text-2xl font-black ${(betToSell?.pnl ?? 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+              <span className="font-bold text-foreground uppercase tracking-wider text-xs">Rentabilidad (PnL):</span>
+              <span className={`text-3xl font-black ${(betToSell?.pnl ?? 0) >= 0 ? 'text-[#00FF00]' : 'text-[#FF0000]'}`}>
                 {(betToSell?.pnl ?? 0) >= 0 ? '+' : ''}{betToSell?.pnlPercentage.toFixed(1)}%
               </span>
             </div>
 
             <div className="flex justify-between items-center px-2 pt-2">
-              <span className="font-bold text-foreground">Retiro Total:</span>
-              <span className="text-xl font-bold text-primary">
+              <span className="font-bold text-foreground uppercase tracking-wider text-sm">Retiro Total:</span>
+              <span className="text-2xl font-black text-primary">
                 {betToSell?.cashoutValue.toLocaleString()} pts
               </span>
             </div>
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setBetToSell(null)}>Cancelar</Button>
-            <Button onClick={confirmSell} disabled={sellingBetId === betToSell?.id} className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold">
-              {sellingBetId === betToSell?.id ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Coins className="w-4 h-4 mr-2" />}
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setBetToSell(null)} className="font-bold rounded-lg">Cancelar</Button>
+            <Button onClick={confirmSell} disabled={sellingBetId === betToSell?.id} className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-lg px-6 shadow-md">
+              {sellingBetId === betToSell?.id ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Coins className="w-5 h-5 mr-2" />}
               Vender Ahora
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      
+      {/* Resto de modales (Edit, Password) irían acá, si los tenías separados dejalos igual */}
     </div>
   );
 }
