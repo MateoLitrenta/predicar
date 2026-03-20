@@ -135,7 +135,8 @@ export default function ProfileClient({ profileId }: ProfileClientProps) {
     userBets
       .filter((b) => b.markets && ['active', 'pending'].includes(String(b.markets.status).toLowerCase()))
       .forEach((bet) => {
-        const market = bet.markets;
+        // ACÁ ESTABA EL ERROR (antes decía b.markets)
+        const market = bet.markets; 
         const opt = marketOptions.find(o => o.id === bet.outcome);
         if (market && opt) {
           totalInvestedActive += bet.amount;
@@ -192,10 +193,6 @@ export default function ProfileClient({ profileId }: ProfileClientProps) {
                 <div className="flex justify-between items-start mb-6">
                   <div className="flex items-center gap-2 text-muted-foreground font-semibold">
                     <LineChart className="w-5 h-5" /> Portfolio
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Capital Disponible</p>
-                    <p className="font-bold text-foreground">{portfolioStats.availableCapital.toLocaleString()} pts</p>
                   </div>
                 </div>
                 
