@@ -89,7 +89,6 @@ export default function AdminDashboardClient() {
   
   const [deletingMarket, setDeletingMarket] = useState<{ id: string, title: string } | null>(null);
 
-  // --- NUEVOS ESTADOS PARA LOS FILTROS ---
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("todos");
   const [categoryFilter, setCategoryFilter] = useState("todas");
@@ -342,7 +341,6 @@ export default function AdminDashboardClient() {
           <Button onClick={() => setIsCreateModalOpen(true)} className="shrink-0 bg-primary hover:bg-primary/90 h-12 w-full md:w-auto font-bold text-base shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all"><Plus className="w-5 h-5 mr-2" /> Crear Mercado Rápido</Button>
         </div>
 
-        {/* --- BARRA DE FILTROS REDISEÑADA Y OPTIMIZADA --- */}
         <div className="mb-8 flex flex-col lg:flex-row gap-4 p-2 bg-card/40 border border-border/50 rounded-2xl shadow-sm backdrop-blur-xl">
           <div className="relative flex-1">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
@@ -427,7 +425,11 @@ export default function AdminDashboardClient() {
                           <TableCell className="text-foreground font-black">{safeNumber(market.total_volume).toLocaleString()} pts</TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-2">
-                              <Button size="icon" variant="outline" className="h-9 w-9 hover:text-primary transition-colors bg-background" onClick={() => setEditingMarket(market)}><Pencil className="w-4 h-4" /></Button>
+                              
+                              {/* BLOQUEO DE EDICIÓN PARA RESUELTOS */}
+                              {market.status !== "resolved" && (
+                                <Button size="icon" variant="outline" className="h-9 w-9 hover:text-primary transition-colors bg-background" onClick={() => setEditingMarket(market)}><Pencil className="w-4 h-4" /></Button>
+                              )}
 
                               {market.status === "pending" && (
                                 <>
@@ -448,7 +450,8 @@ export default function AdminDashboardClient() {
                                 </Button>
                               )}
 
-                              {market.status !== "pending" && (
+                              {/* BLOQUEO DE ELIMINACIÓN/REEMBOLSO PARA RESUELTOS */}
+                              {market.status !== "pending" && market.status !== "resolved" && (
                                 <Button size="icon" variant="destructive" className="h-9 w-9 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white border border-red-500/20" onClick={() => setDeletingMarket({ id: market.id, title: String(market.title) })} disabled={processingIds.has(market.id)}>
                                   {processingIds.has(market.id) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                                 </Button>
@@ -506,9 +509,12 @@ export default function AdminDashboardClient() {
                       </div>
 
                       <div className="pt-2 flex items-center gap-2">
-                        <Button size="icon" variant="outline" className="h-11 w-11 shrink-0 hover:text-primary bg-background" onClick={() => setEditingMarket(market)}>
-                          <Pencil className="w-5 h-5" />
-                        </Button>
+                        {/* BLOQUEO DE EDICIÓN MOBILE PARA RESUELTOS */}
+                        {market.status !== "resolved" && (
+                          <Button size="icon" variant="outline" className="h-11 w-11 shrink-0 hover:text-primary bg-background" onClick={() => setEditingMarket(market)}>
+                            <Pencil className="w-5 h-5" />
+                          </Button>
+                        )}
 
                         {market.status === "pending" && (
                           <>
@@ -533,7 +539,8 @@ export default function AdminDashboardClient() {
                           </Button>
                         )}
 
-                        {market.status !== "pending" && (
+                        {/* BLOQUEO DE ELIMINACIÓN/REEMBOLSO MOBILE PARA RESUELTOS */}
+                        {market.status !== "pending" && market.status !== "resolved" && (
                           <Button size="icon" variant="destructive" className="h-11 w-11 shrink-0 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white border border-red-500/20" onClick={() => setDeletingMarket({ id: market.id, title: String(market.title) })} disabled={processingIds.has(market.id)}>
                             {processingIds.has(market.id) ? <Loader2 className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
                           </Button>
@@ -547,7 +554,6 @@ export default function AdminDashboardClient() {
           </>
         )}
 
-        {/* MODALES MANTIENEN SU CÓDIGO ORIGINAL */}
         <Dialog open={!!deletingMarket} onOpenChange={(open) => !open && setDeletingMarket(null)}>
           <DialogContent className="w-[90vw] max-w-md rounded-2xl">
             <DialogHeader>

@@ -130,6 +130,18 @@ export async function rejectMarket(marketId: string) {
 
 export async function deleteMarket(marketId: string) {
   const supabase = await createClient();
+  
+  // DOBLE CHECK: Verificamos que el mercado NO esté resuelto antes de intentar borrar
+  const { data: marketCheck } = await supabase
+    .from("markets")
+    .select("status")
+    .eq("id", marketId)
+    .single();
+
+  if (marketCheck?.status === 'resolved') {
+    return { ok: false, error: "No se puede eliminar ni reembolsar un mercado que ya ha sido finalizado." };
+  }
+
   const { error } = await supabase.rpc("eliminar_mercado", { p_market_id: marketId });
   if (error) return { ok: false, error: error.message };
   return { ok: true, error: null };
