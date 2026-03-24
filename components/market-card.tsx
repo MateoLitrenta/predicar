@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Coins, Clock, ChevronRight, TrendingUp, Activity, Check } from "lucide-react";
+import { Coins, Clock, ChevronRight, TrendingUp, Activity, Check, Lock, Trophy } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -28,10 +28,13 @@ interface MarketCardProps {
   category: string;
   totalVolume: string;
   endDate: string;
+  rawEndDate?: string; // NUEVO: Fecha real para hacer matemática
   imageUrl?: string | null;
   options: MarketOption[];
   userId: string | null;
   userPoints: number;
+  status?: string; 
+  winningOutcome?: string | null;
   onBetPlaced?: (newPoints: number) => void;
   onOpenAuthModal?: () => void;
   onCategoryClick?: (category: string) => void;
@@ -43,14 +46,21 @@ export function MarketCard({
   category,
   totalVolume,
   endDate,
+  rawEndDate,
   imageUrl,
   options = [],
+  status,
+  winningOutcome,
   onCategoryClick,
 }: MarketCardProps) {
   const router = useRouter();
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  
   const [selectedAction, setSelectedAction] = useState<{ optionId: string; type: 'yes' | 'no' } | null>(null);
+
+  // LÓGICA DE CIERRE: Verificamos si está resuelto o si la fecha ya pasó
+  const isResolved = status === 'resolved';
+  const isClosedByDate = rawEndDate ? new Date(rawEndDate) <= new Date() : false;
+  const isClosed = isResolved || isClosedByDate;
 
   const truncateTitle = (str: string, maxLength: number) => {
     if (str.length <= maxLength) return str;
@@ -58,11 +68,15 @@ export function MarketCard({
   };
 
   const handleNavigateToMarket = () => {
-    router.push(`/market/${id}`);
+    if (isClosed) {
+      router.push(`/market/${id}`);
+    } else if (selectedAction) {
+      router.push(`/market/${id}?preselect=${selectedAction.optionId}&type=${selectedAction.type}`);
+    } else {
+      router.push(`/market/${id}`);
+    }
   };
 
-  // ACÁ ESTÁ EL ARREGLO DEL BUG DEL 99%
-  // Sumamos los votos reales de forma matemática y precisa, ignorando el texto formateado
   const realTotalVotes = options.reduce((acc, opt) => acc + Number(opt.total_votes || 0), 0);
   const totalOptsCount = options.length || 2;
 
@@ -73,7 +87,6 @@ export function MarketCard({
   };
 
   const sortedOptions = [...options].sort((a, b) => Number(b.total_votes) - Number(a.total_votes));
-
   const isBinaryYesNo = options.length === 2 && 
     options.some(o => ['sí', 'si', 'yes'].includes(o.option_name.toLowerCase())) && 
     options.some(o => o.option_name.toLowerCase() === 'no');
@@ -82,16 +95,21 @@ export function MarketCard({
     <>
       <Card 
         onClick={() => {
-          setSelectedAction(null); 
-          setIsPreviewOpen(true);
+          if (isClosed) {
+            handleNavigateToMarket(); // Si está cerrado, viaja directo
+          } else {
+            setSelectedAction(null); 
+            setIsPreviewOpen(true); // Si está activo, abre el popup
+          }
         }}
-        className="group bg-card hover:bg-muted/10 transition-all duration-300 border-border/50 hover:border-primary/50 shadow-sm hover:shadow-md cursor-pointer relative overflow-hidden flex flex-col h-full"
+        className={cn("group bg-card transition-all duration-300 border border-border/50 shadow-sm relative overflow-hidden flex flex-col h-full", 
+          isClosed ? "opacity-80 bg-muted/20" : "hover:bg-muted/10 hover:border-primary/50 hover:shadow-md cursor-pointer")}
       >
         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
 
         <CardContent className="p-4 sm:p-5 flex flex-col flex-1">
-          <div className="flex gap-3 sm:gap-4 mb-4">
-            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 border border-primary/20 overflow-hidden shadow-sm">
+          <div className="flex gap-3 sm:gap-4 mb-4 items-start">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 border border-primary/20 overflow-hidden shadow-sm relative">
               {imageUrl ? (
                 <img src={imageUrl} alt="Market" className="w-full h-full object-cover" />
               ) : (
@@ -99,7 +117,12 @@ export function MarketCard({
               )}
             </div>
             <div className="flex-1 min-w-0">
-              <h3 className="font-bold text-base sm:text-lg leading-tight text-foreground group-hover:text-primary transition-colors line-clamp-3">
+              {isClosed && (
+                <Badge variant="destructive" className="mb-2 uppercase text-[10px] font-bold tracking-wider px-2 py-0.5 gap-1.5 border-red-500/30">
+                  <Lock className="w-3.5 h-3.5" /> {isResolved ? "Finalizado" : "Cerrado"}
+                </Badge>
+              )}
+              <h3 className={cn("font-bold text-base sm:text-lg leading-tight transition-colors line-clamp-3", isClosed ? "text-muted-foreground" : "text-foreground group-hover:text-primary")}>
                 {truncateTitle(question, 80)}
               </h3>
             </div>
@@ -119,13 +142,19 @@ export function MarketCard({
                 </div>
                 
                 <div className="flex flex-wrap gap-2 text-[10px] sm:text-xs">
-                  {sortedOptions.slice(0, 3).map((opt) => (
-                    <div key={opt.id} className="flex items-center gap-1.5 px-2 py-1 rounded-md border border-border/50 bg-background/50 text-foreground">
-                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: opt.color }} />
-                      <span className="font-semibold truncate max-w-[80px] sm:max-w-[100px]">{opt.option_name}</span>
-                      <span className="font-black opacity-80">{Math.round(getProbability(opt.total_votes))}%</span>
-                    </div>
-                  ))}
+                  {sortedOptions.slice(0, 3).map((opt) => {
+                    const pct = Math.round(getProbability(opt.total_votes));
+                    const isWinner = winningOutcome === opt.id;
+                    return (
+                      <div key={opt.id} className={cn("flex items-center gap-1.5 px-2 py-1 rounded-md border border-border/50", 
+                        isWinner ? "bg-primary/20 text-primary border-primary/30" : "bg-background/50 text-foreground")}>
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: opt.color }} />
+                        <span className="font-semibold truncate max-w-[80px] sm:max-w-[100px]">{opt.option_name}</span>
+                        <span className="font-black opacity-80">{pct}%</span>
+                        {isResolved && isWinner && <Trophy className="w-3 h-3 text-primary ml-1" />}
+                      </div>
+                    );
+                  })}
                   {sortedOptions.length > 3 && (
                     <div className="flex items-center px-2 py-1 rounded-md border border-border/50 bg-background/50 text-muted-foreground text-[10px] sm:text-xs font-medium">
                       +{sortedOptions.length - 3}
@@ -155,7 +184,7 @@ export function MarketCard({
               
               <div className="flex items-center gap-2.5 text-muted-foreground text-[10px] sm:text-xs font-medium min-w-0">
                 <span className="flex items-center gap-1 shrink-0"><Coins className="w-3 h-3" />{totalVolume}</span>
-                <span className="flex items-center gap-1 shrink-0"><Clock className="w-3 h-3" />{endDate}</span>
+                <span className={cn("flex items-center gap-1 shrink-0", isClosed ? "text-red-500" : "")}><Clock className="w-3 h-3" />{endDate}</span>
               </div>
             </div>
             
@@ -168,7 +197,11 @@ export function MarketCard({
                 handleNavigateToMarket(); 
               }}
             >
-              Predecir <ChevronRight className="w-3 h-3 ml-1" />
+              {isClosed ? (
+                <>{isResolved ? "Resultados" : "Ver Mercado"} <ChevronRight className="w-3 h-3 ml-1" /></>
+              ) : (
+                <>Predecir <ChevronRight className="w-3 h-3 ml-1" /></>
+              )}
             </Button>
             
           </div>

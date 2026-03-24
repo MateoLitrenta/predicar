@@ -44,12 +44,10 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
-  // Estados de Compartir
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
   const [marketUrl, setMarketUrl] = useState("");
 
-  // Estados de Trading
   const [tradeTab, setTradeTab] = useState("buy");
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
   const [selectedDirection, setSelectedDirection] = useState<'yes' | 'no'>('yes');
@@ -59,7 +57,6 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
   const [userBets, setUserBets] = useState<any[]>([]);
   const [sellingBetId, setSellingBetId] = useState<string | null>(null);
 
-  // Estados de Comentarios
   const [newComment, setNewComment] = useState("");
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [replyingTo, setReplyingTo] = useState<any | null>(null);
@@ -69,6 +66,19 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
 
   useEffect(() => {
     setMarketUrl(window.location.href);
+
+    // ACÁ ESTÁ LA MAGIA DEL DEEP LINKING: Leer la URL para auto-seleccionar
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const preselectId = params.get('preselect');
+      const typeParam = params.get('type');
+
+      if (preselectId) {
+        setSelectedOptionId(preselectId);
+        setSelectedDirection(typeParam === 'no' ? 'no' : 'yes');
+        setTradeTab('buy');
+      }
+    }
   }, []);
 
   const fetchUserAndProfile = useCallback(async () => {
@@ -193,10 +203,12 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
     window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
   };
 
+  // MATEMÁTICA BLINDADA: Sumamos los votos reales de las opciones
+  const realTotalVotes = options.reduce((acc, opt) => acc + Number(opt.total_votes || 0), 0);
+
   const getOptionPrice = (optionVotes: number) => {
-    const totalVol = Number(market?.total_volume || 0);
     const totalOpts = options.length || 2;
-    let price = (Number(optionVotes) + 100.0) / (totalVol + (totalOpts * 100.0));
+    let price = (Number(optionVotes) + 100.0) / (realTotalVotes + (totalOpts * 100.0));
     return Math.max(0.01, Math.min(0.99, price));
   };
 
@@ -206,17 +218,16 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
     
     const direction = bet.direction || 'yes';
     const optionVotes = Number(opt.total_votes || 0);
-    const totalVol = Number(market?.total_volume || 0);
     const totalOptions = options.length || 2;
 
-    const startPriceYes = (optionVotes + 100.0) / (totalVol + (totalOptions * 100.0));
+    const startPriceYes = (optionVotes + 100.0) / (realTotalVotes + (totalOptions * 100.0));
     const estPayout = shares * (direction === 'yes' ? startPriceYes : (1 - startPriceYes));
 
     let endPriceYes = 0;
     if (direction === 'yes') {
-      endPriceYes = Math.max(0.01, (optionVotes - estPayout + 100.0) / (Math.max(1, totalVol - estPayout) + (totalOptions * 100.0)));
+      endPriceYes = Math.max(0.01, (optionVotes - estPayout + 100.0) / (Math.max(1, realTotalVotes - estPayout) + (totalOptions * 100.0)));
     } else {
-      endPriceYes = Math.max(0.01, (optionVotes + 100.0) / (Math.max(1, totalVol - estPayout) + (totalOptions * 100.0)));
+      endPriceYes = Math.max(0.01, (optionVotes + 100.0) / (Math.max(1, realTotalVotes - estPayout) + (totalOptions * 100.0)));
     }
 
     let avgPriceYes = (startPriceYes + endPriceYes) / 2.0;
@@ -310,10 +321,8 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
   if (isLoading) return <div className="min-h-screen bg-background flex justify-center items-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   if (!market) return null;
 
-  // LÓGICA DE CIERRE DE MERCADO
   const isMarketClosed = market.status === 'resolved' || (market.end_date && new Date(market.end_date) <= new Date());
 
-  const totalVotesMulti = options.reduce((sum, opt) => sum + Number(opt.total_votes), 0);
   const topLevelComments = comments.filter(c => !c.parent_id).reverse();
 
   const isBinaryYesNo = options.length === 2 && 
@@ -480,7 +489,7 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
                 </div>
                 <h1 className="text-2xl sm:text-3xl font-bold text-foreground leading-tight mb-2">{market.title}</h1>
                 <div className="flex items-center gap-4 text-sm text-muted-foreground mt-3">
-                  <div className="flex items-center gap-1.5"><Coins className="w-4 h-4" />{totalVotesMulti.toLocaleString()} pts Vol.</div>
+                  <div className="flex items-center gap-1.5"><Coins className="w-4 h-4" />{realTotalVotes.toLocaleString()} pts Vol.</div>
                   <div className={cn("flex items-center gap-1.5", isMarketClosed ? "text-red-500 font-medium" : "")}>
                     <Clock className="w-4 h-4" />
                     {isMarketClosed ? `Cerró el ${new Date(market.end_date).toLocaleDateString()}` : `Cierra: ${new Date(market.end_date).toLocaleDateString()}`}
@@ -604,7 +613,6 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
                   </TabsTrigger>
                 </TabsList>
 
-                {/* AVISO DE MERCADO CERRADO */}
                 {isMarketClosed && (
                   <div className="mb-4 mx-2 p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-2 text-red-500">
                     <Lock className="w-4 h-4 mt-0.5 shrink-0" />
@@ -614,7 +622,6 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
                   </div>
                 )}
 
-                {/* PESTAÑA COMPRAR */}
                 <TabsContent value="buy" className="p-2 sm:p-3 mt-0">
                   <div className="flex flex-col gap-4">
                     {!selectedOptionId ? (
@@ -686,7 +693,6 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
                   </div>
                 </TabsContent>
 
-                {/* PESTAÑA VENDER */}
                 <TabsContent value="sell" className="p-2 sm:p-3 mt-0">
                   {!user ? (
                     <div className="text-center py-8">
@@ -765,7 +771,6 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
           <div className="block lg:hidden w-full order-4 mt-2">{UltimasApuestasBlock}</div>
         </div>
 
-        {/* MODAL DE COMPARTIR */}
         <Dialog open={isShareModalOpen} onOpenChange={setIsShareModalOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>

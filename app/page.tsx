@@ -26,6 +26,8 @@ interface Market {
   category: string;
   total_volume: number;
   end_date: string;
+  status: string; // Agregado para leer el estado de la BD
+  winning_outcome?: string | null; // Agregado para leer el ganador de la BD
   created_at: string;
   updated_at: string;
   trending?: "up" | "down";
@@ -106,6 +108,7 @@ export default function PredictionMarketDashboard() {
   const fetchMarkets = useCallback(async () => {
     setIsLoadingMarkets(true);
 
+    // ARREGLO: Traemos los mercados activos Y los resueltos para que se vean finalizados en el feed
     const { data, error } = await supabase
       .from("markets")
       .select(`
@@ -114,12 +117,14 @@ export default function PredictionMarketDashboard() {
         category, 
         total_volume, 
         end_date, 
+        status,
+        winning_outcome,
         created_at,
         updated_at,
         image_url,
         market_options (id, option_name, color, total_votes)
       `)
-      .eq("status", "active");
+      .in("status", ["active", "resolved"]); 
 
     if (error) {
       console.log("[v0] Error fetching markets:", error.message);
@@ -209,11 +214,9 @@ export default function PredictionMarketDashboard() {
           </Button>
         </div>
 
-        {/* EL BLOQUE DE CONTROL: Ahora es un panel unificado */}
         <div className="bg-card/50 backdrop-blur-sm border border-border/50 rounded-2xl p-4 sm:p-6 mb-8 md:mb-10 shadow-sm">
           <div className="flex flex-col xl:flex-row gap-4 xl:items-center">
             
-            {/* Buscador Redondeado con OKLCH */}
             <div className="relative flex-1 max-w-xl">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
               <Input 
@@ -224,7 +227,6 @@ export default function PredictionMarketDashboard() {
               />
             </div>
 
-            {/* Filtros de orden (Más estilizados y redondeados) */}
             <div className="flex gap-2 overflow-x-auto pb-2 xl:pb-0 -mx-4 px-4 xl:mx-0 xl:px-0 xl:overflow-visible [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
               <Button variant={sortBy === "trending" ? "default" : "secondary"} onClick={() => setSortBy("trending")} className={cn("whitespace-nowrap shrink-0 h-10 rounded-full font-semibold transition-all", sortBy !== "trending" && "hover:bg-muted bg-background border border-border/50")}>
                 <Flame className={cn("w-4 h-4 mr-2", sortBy === "trending" ? "text-primary-foreground" : "text-orange-500")} /> Popular
@@ -241,10 +243,8 @@ export default function PredictionMarketDashboard() {
             </div>
           </div>
 
-          {/* Separador sutil */}
           <div className="h-px w-full bg-border/50 my-4 xl:my-5" />
 
-          {/* Categorías (también con bordes redondeados) */}
           <div className="overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             <CategoryFilter selectedCategory={selectedCategory} onSelectCategory={setSelectedCategory} />
           </div>
@@ -268,19 +268,16 @@ export default function PredictionMarketDashboard() {
                   id={market.id}
                   question={market.title}
                   category={market.category}
-                  totalVolume={Number(market.total_volume ?? 0).toLocaleString()}
-                  endDate={formatDate(market.end_date)}
+                  totalVolume={market.total_volume.toLocaleString()}
+                  endDate={formatDate(market.end_date)} 
+                  rawEndDate={market.end_date}          
                   imageUrl={market.image_url}
                   options={market.options || []}
                   userId={user?.id ?? null}
-                  userPoints={userPoints}
-                  onBetPlaced={handlePointsUpdate}
-                  onOpenAuthModal={() => setIsAuthModalOpen(true)}
-                  onCategoryClick={(cat) => {
-                    const normalizedCat = cat.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                    setSelectedCategory(normalizedCat);
-                    window.scrollTo({ top: 0, behavior: 'smooth' }); 
-                  }}
+                  userPoints={0}
+                  status={market.status}                
+                  winningOutcome={market.winning_outcome} 
+                  onCategoryClick={setSelectedCategory}
                 />
               ))}
             </div>
