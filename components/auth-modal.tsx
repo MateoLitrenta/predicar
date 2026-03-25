@@ -20,7 +20,7 @@ interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAuthSuccess: () => void;
-  isDarkMode: boolean; // Lo mantenemos por si lo usás en el futuro, aunque los inputs de shadcn se adaptan solos
+  isDarkMode: boolean; 
 }
 
 export function AuthModal({
@@ -34,6 +34,9 @@ export function AuthModal({
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // NUEVO ESTADO: Guarda el código de referido si vino por link
+  const [referralCode, setReferralCode] = useState<string | null>(null);
+
   // Estados del formulario
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -44,6 +47,17 @@ export function AuthModal({
 
   useEffect(() => {
     setMounted(true);
+    
+    // TRAMPA DE REFERIDOS: Lee la URL apenas carga el componente
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const ref = params.get('ref');
+      if (ref) {
+        setReferralCode(ref);
+        // Si vino con link de referido, le abrimos la pestaña de registro de una
+        setActiveTab("register");
+      }
+    }
   }, []);
 
   // Limpiar el formulario cuando se abre/cierra
@@ -81,14 +95,12 @@ export function AuthModal({
     setIsLoading(true);
     setErrorMsg(null);
 
-    // 1. Validar que las contraseñas coincidan
     if (password !== confirmPassword) {
       setErrorMsg("Las contraseñas no coinciden.");
       setIsLoading(false);
       return;
     }
 
-    // 2. Formatear y validar nombre de usuario
     const cleanUsername = username.trim().toLowerCase().replace(/\s+/g, "");
     if (cleanUsername.length < 3) {
       setErrorMsg("El nombre de usuario debe tener al menos 3 caracteres.");
@@ -96,7 +108,6 @@ export function AuthModal({
       return;
     }
 
-    // 3. Verificar si el nombre de usuario ya existe en la base de datos
     const { data: existingUser } = await supabase
       .from("profiles")
       .select("id")
@@ -109,7 +120,7 @@ export function AuthModal({
       return;
     }
 
-    // 4. Registrar al usuario en Supabase Auth
+    // Registrar al usuario en Supabase Auth
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -128,16 +139,36 @@ export function AuthModal({
       return;
     }
 
-    // 5. Forzar la actualización del perfil por si el trigger automático falla
     if (data?.user) {
+      // 1. Forzamos la actualización del perfil básico
       await supabase.from("profiles").update({
         username: cleanUsername,
         full_name: fullName.trim(),
         date_of_birth: dob,
       }).eq("id", data.user.id);
+
+      // 2. DISPARADOR DE REFERIDOS MULTINIVEL
+      // Si este usuario se registró usando un link de referido, ejecutamos el pago
+      if (referralCode) {
+        try {
+          const { error: rpcError } = await supabase.rpc('process_referral', {
+            referrer_username: referralCode
+          });
+          
+          if (!rpcError) {
+             console.log("Sistema de referidos ejecutado con éxito para:", referralCode);
+             // Podrías mostrar un toast extra acá si querés:
+             // toast({ title: "¡Bono de Referido!", description: "Recibiste 1000 pts extra por usar el link de invitación." });
+          } else {
+             console.error("Error al procesar referido:", rpcError);
+          }
+        } catch (err) {
+          console.error("Error catcheado al procesar referido:", err);
+        }
+      }
     }
 
-    toast({ title: "¡Cuenta creada!", description: "Bienvenido a PredicAR." });
+    toast({ title: "¡Cuenta creada!", description: "Bienvenido a PREDIX." });
     onAuthSuccess();
     onClose();
     setIsLoading(false);
@@ -150,12 +181,19 @@ export function AuthModal({
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle className="text-center text-2xl font-bold">
-            Bienvenido a <span className="text-primary">Predic</span><span className="text-secondary">AR</span>
+            Bienvenido a <span className="text-primary">PREDIX</span>
           </DialogTitle>
           <DialogDescription className="text-center">
             {activeTab === "login" ? "Iniciá sesión para seguir jugando." : "Creá tu cuenta y empezá a predecir."}
           </DialogDescription>
         </DialogHeader>
+
+        {/* CARTELITO DE REFERIDO: Para que el usuario sepa que le funcionó el link */}
+        {referralCode && activeTab === "register" && (
+           <div className="bg-primary/10 border border-primary/30 text-primary p-3 rounded-md flex items-center justify-center text-sm font-medium mt-1">
+              ✨ ¡Fuiste invitado por {referralCode}! Registrate ahora y ganá 1000 pts de bono.
+           </div>
+        )}
 
         {errorMsg && (
           <div className="bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 p-3 rounded-md flex items-center gap-2 text-sm mt-2">
@@ -170,7 +208,6 @@ export function AuthModal({
             <TabsTrigger value="register">Registrarse</TabsTrigger>
           </TabsList>
 
-          {/* PESTAÑA DE LOGIN */}
           <TabsContent value="login">
             <form onSubmit={handleLogin} className="space-y-4 pt-4">
               <div className="space-y-2">
@@ -188,7 +225,6 @@ export function AuthModal({
             </form>
           </TabsContent>
 
-          {/* PESTAÑA DE REGISTRO */}
           <TabsContent value="register">
             <form onSubmit={handleRegister} className="space-y-3 pt-4">
               <div className="grid grid-cols-2 gap-3">

@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Coins, User, ArrowLeft, Loader2, TrendingUp, TrendingDown, History, Pencil, Landmark, Lock, Camera, LineChart, Trophy, CheckCircle2, Clock, XCircle, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { Coins, User, ArrowLeft, Loader2, TrendingUp, TrendingDown, History, Pencil, Landmark, Lock, Camera, LineChart, Trophy, CheckCircle2, Clock, XCircle, ArrowUpRight, ArrowDownRight, Gift, Copy, Check, Users } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -36,7 +36,6 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<any>(null);
   const [bets, setBets] = useState<BetWithMarket[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
-  
   const [marketOptions, setMarketOptions] = useState<any[]>([]);
   
   const [isChecking, setIsChecking] = useState(true);
@@ -59,13 +58,24 @@ export default function ProfilePage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isChangingPassword, setIsChangingPassword] = useState(false);
 
-  // Estado para el filtro de tiempo del PnL
   const [timeframe, setTimeframe] = useState<'1D' | 'ALL'>('ALL');
+
+  // ESTADOS DE REFERIDOS
+  const [referralLink, setReferralLink] = useState("");
+  const [isCopied, setIsCopied] = useState(false);
+  const [referredUsers, setReferredUsers] = useState<any[]>([]);
 
   const fetchUserData = useCallback(async () => {
     setIsLoadingBets(true);
     setIsLoadingTransactions(true);
     
+    // Obtenemos a quiénes referiste para mostrarlos en el panel
+    let refUsers: any[] = [];
+    if (profile?.id) {
+       const { data } = await supabase.from("profiles").select("username, created_at").eq("referred_by", profile.id).order("created_at", { ascending: false });
+       if (data) refUsers = data;
+    }
+
     const [betsRes, txRes, optionsRes] = await Promise.all([
       getMyBets(),
       getMyTransactions(),
@@ -75,10 +85,11 @@ export default function ProfilePage() {
     if (!betsRes.error && betsRes.data) setBets(betsRes.data);
     if (!txRes.error && txRes.data) setTransactions(txRes.data);
     if (optionsRes.data) setMarketOptions(optionsRes.data);
+    setReferredUsers(refUsers);
     
     setIsLoadingBets(false);
     setIsLoadingTransactions(false);
-  }, [supabase]);
+  }, [profile?.id, supabase]);
 
   const fetchAuth = useCallback(async () => {
     const p = await getProfile();
@@ -95,6 +106,11 @@ export default function ProfilePage() {
       setProfile(p);
       setNewUsername(p.username || "");
       setPreviewUrl((p as any).avatar_url || null);
+      
+      if (typeof window !== "undefined" && p.username) {
+        setReferralLink(`${window.location.origin}/?ref=${p.username}`);
+      }
+
       setIsChecking(false);
     };
     load();
@@ -108,6 +124,13 @@ export default function ProfilePage() {
     if (isDarkMode) document.documentElement.classList.add("dark");
     else document.documentElement.classList.remove("dark");
   }, [isDarkMode]);
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(referralLink);
+    setIsCopied(true);
+    toast({ title: "¡Link copiado!", description: "Mandáselo a tus amigos para ganar puntos." });
+    setTimeout(() => setIsCopied(false), 2000);
+  };
 
   const calculateRealCashout = useCallback((bet: any, market: any, opt: any) => {
     const shares = Number(bet.shares || 0);
@@ -248,10 +271,7 @@ export default function ProfilePage() {
 
         <div className="max-w-5xl mx-auto">
           
-          {/* LAS DOS CAJAS ESTILO POLYMARKET */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-8">
-            
-            {/* CAJA 1: Portfolio Value */}
             <Card className="bg-card/50 backdrop-blur-sm border border-border/50 shadow-sm rounded-2xl overflow-hidden">
               <CardContent className="p-6 md:p-8 flex flex-col justify-between h-full">
                 <div className="flex justify-between items-start mb-6">
@@ -277,7 +297,6 @@ export default function ProfilePage() {
               </CardContent>
             </Card>
 
-            {/* CAJA 2: Profit/Loss */}
             <Card className="bg-card/50 backdrop-blur-sm border border-border/50 shadow-sm rounded-2xl overflow-hidden relative">
               <div className="absolute bottom-0 left-0 w-full h-1/2 bg-gradient-to-t from-primary/10 to-transparent pointer-events-none" />
               <svg className="absolute bottom-0 left-0 w-full h-24 text-primary/20 pointer-events-none" preserveAspectRatio="none" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -291,7 +310,6 @@ export default function ProfilePage() {
                     {portfolioStats.totalPnl >= 0 ? <ArrowUpRight className="w-5 h-5" /> : <ArrowDownRight className="w-5 h-5" />} Profit/Loss
                   </div>
                   
-                  {/* Botones Interactivos de Tiempo */}
                   <div className="flex gap-1 bg-background/50 backdrop-blur-md rounded-lg p-1 border border-border/50">
                     <button 
                       onClick={() => setTimeframe('1D')} 
@@ -318,10 +336,56 @@ export default function ProfilePage() {
                 </div>
               </CardContent>
             </Card>
-
           </div>
 
-          <Card className="bg-card border-border/50 mt-8 shadow-md rounded-2xl overflow-hidden">
+          {/* LA TRAMPA DE OSOS: BLOQUE DE REFERIDOS */}
+          <Card className="bg-gradient-to-br from-primary/10 via-background to-background border-primary/20 shadow-md rounded-2xl mb-8 overflow-hidden">
+            <CardContent className="p-6 md:p-8">
+              <div className="flex flex-col md:flex-row items-center gap-6">
+                <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+                  <Gift className="w-8 h-8 text-primary" />
+                </div>
+                <div className="flex-1 text-center md:text-left">
+                  <h3 className="text-2xl font-bold text-foreground mb-2">¡Invitá amigos y ganá puntos!</h3>
+                  <p className="text-muted-foreground text-sm max-w-xl">
+                    Ganá <strong className="text-primary">2.000 pts</strong> por cada amigo que se registre con tu link. Además, ganás <strong className="text-primary">500 pts extras</strong> cada vez que ellos inviten a alguien más. Tu amigo recibe 1.000 pts de bienvenida.
+                  </p>
+                </div>
+                <div className="w-full md:w-auto mt-4 md:mt-0 flex flex-col gap-2">
+                  <div className="relative">
+                    <Input readOnly value={referralLink} className="pr-12 bg-background border-border/50 font-medium text-muted-foreground w-full md:w-80" />
+                    <Button size="icon" variant="ghost" className="absolute right-0 top-0 h-full w-12 hover:bg-transparent" onClick={handleCopyLink}>
+                      {isCopied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4 text-muted-foreground" />}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* LISTA DE REFERIDOS OBTENIDOS */}
+              {referredUsers.length > 0 && (
+                <div className="mt-8 pt-6 border-t border-border/50 w-full">
+                  <h4 className="text-sm font-bold text-foreground mb-4 flex items-center gap-2">
+                    <Users className="w-4 h-4 text-primary" /> Tus Referidos ({referredUsers.length})
+                  </h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {referredUsers.map((user, i) => (
+                      <div key={i} className="flex items-center gap-3 bg-background/50 border border-border/50 rounded-lg p-3 hover:border-primary/30 transition-colors">
+                        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold shrink-0">
+                          {user.username.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-bold text-sm text-foreground truncate">{user.username}</p>
+                          <p className="text-[10px] text-muted-foreground uppercase">{new Date(user.created_at).toLocaleDateString('es-AR')}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="bg-card border-border/50 shadow-md rounded-2xl overflow-hidden">
             <CardContent className="p-4 sm:p-6 md:p-8">
               <Tabs defaultValue="active" className="w-full">
                 <TabsList className="grid w-full grid-cols-3 h-12 mb-8 bg-muted/50 rounded-lg p-1 border border-border/50">
@@ -330,7 +394,6 @@ export default function ProfilePage() {
                   <TabsTrigger value="bank" className="flex items-center gap-2 text-xs sm:text-sm font-bold rounded-md"><Landmark className="w-4 h-4" /><span className="hidden sm:inline">Movimientos</span></TabsTrigger>
                 </TabsList>
 
-                {/* TAB: ACTIVAS */}
                 <TabsContent value="active" className="space-y-4">
                   {isLoadingBets ? (
                     <div className="flex items-center justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-primary opacity-60" /></div>
@@ -422,7 +485,6 @@ export default function ProfilePage() {
                   )}
                 </TabsContent>
 
-                {/* TAB: FINALIZADAS */}
                 <TabsContent value="finished" className="space-y-4">
                    {bets.filter((b) => getMarket(b) && FINISHED_STATUSES.includes(String(getMarket(b)!.status).toLowerCase())).length === 0 ? (
                     <div className="p-12 text-center text-muted-foreground">
@@ -480,7 +542,6 @@ export default function ProfilePage() {
                   )}
                 </TabsContent>
 
-                {/* TAB: MOVIMIENTOS */}
                 <TabsContent value="bank" className="space-y-3">
                   {isLoadingTransactions ? (
                     <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
@@ -521,6 +582,7 @@ export default function ProfilePage() {
         </div>
       </main>
 
+      {/* MODAL DE VENTA */}
       <Dialog open={!!betToSell} onOpenChange={(open) => !open && setBetToSell(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -571,7 +633,58 @@ export default function ProfilePage() {
         </DialogContent>
       </Dialog>
       
-      {/* Resto de modales (Edit, Password) irían acá, si los tenías separados dejalos igual */}
+      {/* MODAL DE EDITAR PERFIL */}
+      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar Perfil</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSaveProfile} className="space-y-4 pt-4">
+            <div className="flex flex-col items-center gap-4 mb-6">
+              <div className="relative w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center border-2 border-border overflow-hidden">
+                {previewUrl ? <img src={previewUrl} alt="Avatar" className="w-full h-full object-cover" /> : <User className="w-10 h-10 text-primary opacity-50" />}
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+                  <Camera className="w-6 h-6 text-white" />
+                </div>
+              </div>
+              <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => { if (e.target.files && e.target.files[0]) { setSelectedImage(e.target.files[0]); setPreviewUrl(URL.createObjectURL(e.target.files[0])); } }} />
+              <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>Cambiar foto</Button>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="username">Nombre de usuario</Label>
+              <Input id="username" value={newUsername} onChange={(e) => setNewUsername(e.target.value)} required />
+            </div>
+            <Button type="submit" className="w-full mt-4" disabled={isSaving}>
+              {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Guardar Cambios
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL DE CAMBIAR CONTRASEÑA */}
+      <Dialog open={isPasswordModalOpen} onOpenChange={setIsPasswordModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Cambiar Contraseña</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleChangePassword} className="space-y-4 pt-4">
+            <div className="space-y-2">
+              <Label htmlFor="new-password">Nueva Contraseña</Label>
+              <Input id="new-password" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required minLength={6} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirm-password">Confirmar Contraseña</Label>
+              <Input id="confirm-password" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required minLength={6} />
+            </div>
+            <Button type="submit" className="w-full mt-4" disabled={isChangingPassword}>
+              {isChangingPassword ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Actualizar Contraseña
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
