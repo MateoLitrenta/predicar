@@ -7,7 +7,7 @@ import { getProfile, getMyBets, getMyTransactions, updateUserPassword, updatePro
 import { createClient } from "@/lib/supabase/client";
 import { NavHeader } from "@/components/nav-header";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -19,11 +19,17 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Coins, User, ArrowLeft, Loader2, TrendingUp, TrendingDown, History, Pencil, Landmark, Lock, Camera, LineChart, Trophy, CheckCircle2, Clock, XCircle, ArrowUpRight, ArrowDownRight, Gift, Copy, Check, Users, ChevronDown, ChevronUp } from "lucide-react";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { 
+  Coins, User as UserIcon, ArrowLeft, Loader2, TrendingUp, TrendingDown, 
+  History, Pencil, Landmark, Lock, Camera, LineChart, CheckCircle2, 
+  Clock, XCircle, ArrowUpRight, ArrowDownRight, Gift, Copy, Check, 
+  Users, ChevronDown, ChevronUp, Wallet, CalendarDays 
+} from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
-import { ResponsiveContainer, AreaChart, Area, Tooltip as RechartsTooltip, XAxis, YAxis } from "recharts";
+import { ResponsiveContainer, AreaChart, Area, Tooltip, XAxis, YAxis } from "recharts";
 
 const ACTIVE_STATUSES = ["active", "pending"];
 const FINISHED_STATUSES = ["resolved", "rejected"];
@@ -163,29 +169,24 @@ export default function ProfilePage() {
     return d;
   }, [timeframe]);
 
+  // PORTFOLIO GLOBAL ESTATICO
   const portfolioStats = useMemo(() => {
     const availableCapital = profile?.points ?? 0;
-    let totalInvestedActive = 0;
     let totalCurrentValueActive = 0;
 
     bets
       .filter((b) => getMarket(b) && ACTIVE_STATUSES.includes(String(getMarket(b)!.status).toLowerCase()))
-      .filter((b) => new Date(b.created_at) >= startDate)
       .forEach((bet) => {
-        const market = getMarket(bet);
+        const market = getMarket(bet); 
         const opt = bet.option_details;
         if (market && opt) {
-          totalInvestedActive += bet.amount;
           totalCurrentValueActive += calculateRealCashout(bet, market, opt);
         }
       });
 
     const totalPortfolioValue = availableCapital + totalCurrentValueActive;
-    const totalPnl = totalCurrentValueActive - totalInvestedActive;
-    const totalPnlPercentage = totalInvestedActive > 0 ? (totalPnl / totalInvestedActive) * 100 : 0;
-
-    return { availableCapital, totalPortfolioValue, totalPnl, totalPnlPercentage };
-  }, [bets, profile?.points, calculateRealCashout, startDate]);
+    return { availableCapital, totalPortfolioValue, lockedValueOffset: totalCurrentValueActive };
+  }, [bets, profile?.points, calculateRealCashout, marketOptions]);
 
   const processedTransactions = useMemo(() => {
     if (!transactions.length) return [];
@@ -198,38 +199,97 @@ export default function ProfilePage() {
     });
   }, [transactions, profile?.points]);
 
+  // LA MAGIA DEL GRÁFICO (Idéntica al perfil público)
   const chartData = useMemo(() => {
-    const filtered = processedTransactions.filter(tx => new Date(tx.created_at) >= startDate);
-    const chronological = [...filtered].reverse(); 
+    const chronological = [...processedTransactions].reverse(); 
+    const offset = portfolioStats.lockedValueOffset; 
+    const now = Date.now();
     
-    if (chronological.length === 0) {
-      return [
-        { date: 'Inicio', value: profile?.points || 0 },
-        { date: 'Actual', value: profile?.points || 0 }
-      ];
+    let startTimeForAll = now;
+    if (profile?.created_at) {
+        startTimeForAll = new Date(profile.created_at).getTime();
+    } else if (chronological.length > 0) {
+        startTimeForAll = new Date(chronological[0].created_at).getTime();
+    } else {
+        const d = new Date(now);
+        d.setMonth(d.getMonth() - 1);
+        startTimeForAll = d.getTime();
+    }
+    
+    let timestamps: number[] = [];
+
+    if (timeframe === '1D') {
+        for(let i=24; i>=0; i--) timestamps.push(now - i * 3600 * 1000); 
+    } else if (timeframe === '1W') {
+        for(let i=7; i>=0; i--) timestamps.push(now - i * 86400 * 1000); 
+    } else if (timeframe === '1M') {
+        for(let i=30; i>=0; i--) timestamps.push(now - i * 86400 * 1000); 
+    } else if (timeframe === '6M') {
+        for(let i=6; i>=0; i--) { 
+            const d = new Date(now);
+            d.setMonth(d.getMonth() - i);
+            timestamps.push(d.getTime());
+        }
+    } else if (timeframe === '1Y') {
+        for(let i=12; i>=0; i--) { 
+            const d = new Date(now);
+            d.setMonth(d.getMonth() - i);
+            timestamps.push(d.getTime());
+        }
+    } else if (timeframe === 'ALL') {
+        const diff = now - startTimeForAll;
+        const steps = Math.max(1, Math.ceil(diff / (30 * 86400 * 1000))); 
+        for(let i=0; i<=steps; i++) {
+            timestamps.push(startTimeForAll + (diff / steps) * i);
+        }
     }
 
-    const data = [{
-      date: 'Inicio del período',
-      value: chronological[0].balanceBefore
-    }];
+    const startTime = timestamps[0];
 
     chronological.forEach(tx => {
-      data.push({
-        date: new Date(tx.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }),
-        value: tx.balanceAfter
-      });
+        const txTime = new Date(tx.created_at).getTime();
+        if (txTime >= startTime && txTime <= now) timestamps.push(txTime);
     });
 
+    timestamps = Array.from(new Set(timestamps)).sort((a, b) => a - b);
+
+    const data = timestamps.map(ts => {
+        const pastTxs = chronological.filter(tx => new Date(tx.created_at).getTime() <= ts);
+        let baseBalance = 0;
+        
+        if (pastTxs.length > 0) {
+            baseBalance = pastTxs[pastTxs.length - 1].balanceAfter;
+        } else if (chronological.length > 0) {
+            baseBalance = chronological[0].balanceBefore;
+        } else {
+            baseBalance = profile?.points || 0;
+        }
+        
+        return { timestamp: ts, value: baseBalance + offset };
+    });
+
+    if (data.length === 0 || data[data.length - 1].timestamp !== now) {
+        data.push({ timestamp: now, value: portfolioStats.totalPortfolioValue });
+    }
+
     return data;
-  }, [processedTransactions, startDate, profile?.points]);
+  }, [processedTransactions, timeframe, portfolioStats, profile]);
 
-  const isProfit = portfolioStats.totalPnl >= 0;
-
-  // COLOR DINÁMICO PARA EL GRÁFICO (Verde bancario en light mode, verde neón en dark mode)
-  const themeChartColor = isProfit 
-    ? (isDarkMode ? "#00FF00" : "#16a34a") 
-    : (isDarkMode ? "#FF0000" : "#dc2626");
+  // MOTOR PNL ABSOLUTO (CORREGIDO PARA MOSTRAR GANANCIAS CORRECTAS DESDE CERO)
+  const dynamicPnl = useMemo(() => {
+    if (chartData.length < 2) return { value: 0, percentage: 0 };
+    
+    const startValue = chartData[0].value; 
+    const endValue = chartData[chartData.length - 1].value;
+    
+    const val = endValue - startValue;
+    
+    let divisor = startValue;
+    if (divisor === 0) divisor = 10000;
+    const pct = (val / Math.abs(divisor)) * 100;
+    
+    return { value: val, percentage: pct };
+  }, [chartData]);
 
   const confirmSell = async () => { 
     if (!betToSell) return;
@@ -264,6 +324,29 @@ export default function ProfilePage() {
     if (!error) { toast({ title: "¡Contraseña actualizada!" }); setIsPasswordModalOpen(false); setNewPassword(""); setConfirmPassword(""); }
   };
 
+  const customTooltipFormatter = (value: number) => [`${value.toLocaleString()} pts`];
+  
+  const customTooltipLabelFormatter = (label: number) => {
+    const date = new Date(label);
+    if (timeframe === '1D') return date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+    return date.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
+
+  const xAxisFormatter = (tick: number) => {
+    const date = new Date(tick);
+    if (timeframe === '1D') return date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+    if (timeframe === '1W' || timeframe === '1M') return date.toLocaleDateString('es-AR', { day: '2-digit', month: 'short' });
+    return date.toLocaleDateString('es-AR', { month: 'short', year: '2-digit' });
+  };
+
+  const yAxisFormatter = (tick: number) => {
+    if (tick >= 1000) return `${(tick / 1000).toFixed(0)}k`;
+    return tick.toString();
+  };
+
+  const isProfit = dynamicPnl.value >= 0;
+  const themeChartColor = isProfit ? (isDarkMode ? "#00FF00" : "#16a34a") : (isDarkMode ? "#FF0000" : "#dc2626");
+
   if (isChecking) return <div className="min-h-screen bg-background flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   if (!profile) return null;
 
@@ -273,263 +356,335 @@ export default function ProfilePage() {
     <div className="min-h-screen bg-background flex flex-col">
       <NavHeader points={profile.points ?? 10000} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode(!isDarkMode)} onPointsUpdate={() => {}} userId={profile.id} userEmail={profile.email ?? null} onOpenAuthModal={() => router.push("/")} onSignOut={async () => { await createClient().auth.signOut(); router.replace("/"); }} isAdmin={profile.role === "admin"} username={profile.username ?? null} />
 
-      <main className="container mx-auto px-4 py-8 flex-1">
-        
-        <div className="max-w-5xl mx-auto flex items-center justify-between mb-8">
+      <main className="container mx-auto px-4 py-8 flex-1 max-w-4xl">
+        <div className="flex items-center justify-between mb-8">
           <Button variant="ghost" size="sm" asChild className="-ml-2 text-muted-foreground hover:text-foreground">
-            <Link href="/" className="flex items-center gap-2"><ArrowLeft className="w-4 h-4" /> Volver</Link>
+            <Link href="/"><ArrowLeft className="w-4 h-4 mr-2" /> Volver al Inicio</Link>
           </Button>
-          <div className="flex items-center gap-4">
-             <div className="flex items-center gap-3 mr-4">
-               <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary border-2 border-background shadow-sm overflow-hidden shrink-0">
-                  {profile.avatar_url ? <img src={profile.avatar_url} alt="Avatar" className="w-full h-full object-cover" /> : <User className="w-5 h-5" />}
-               </div>
-               <span className="font-bold text-foreground">{displayName}</span>
-             </div>
-             <Button variant="outline" size="icon" onClick={() => setIsPasswordModalOpen(true)}><Lock className="w-4 h-4" /></Button>
-             <Button variant="outline" size="sm" onClick={() => { setNewUsername(profile.username || ""); setPreviewUrl(profile.avatar_url || null); setSelectedImage(null); setIsEditModalOpen(true); }}><Pencil className="w-4 h-4 mr-2" /> Editar</Button>
-          </div>
+          <Badge className="bg-primary/10 text-primary border-primary/20 font-medium">Área Personal</Badge>
         </div>
 
-        <div className="max-w-5xl mx-auto">
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-8">
-            <Card className="bg-card/50 backdrop-blur-sm border border-border/50 shadow-sm rounded-2xl overflow-hidden">
-              <CardContent className="p-6 md:p-8 flex flex-col justify-between h-full">
-                <div className="flex justify-between items-start mb-6">
-                  <div className="flex items-center gap-2 text-muted-foreground font-semibold">
-                    <LineChart className="w-5 h-5" /> Portfolio Total
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Capital Disponible</p>
-                    <p className="font-bold text-foreground">{portfolioStats.availableCapital.toLocaleString()} pts</p>
-                  </div>
+        {/* CABECERA UNIFICADA DE MI PERFIL */}
+        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 mb-12">
+            <Avatar className="w-24 h-24 sm:w-28 sm:h-28 border-4 border-background bg-primary/10 shadow-lg shrink-0">
+                {profile.avatar_url ? <AvatarImage src={profile.avatar_url} className="object-cover" /> : <AvatarFallback><UserIcon className="w-12 h-12 text-primary opacity-50" /></AvatarFallback>}
+            </Avatar>
+            <div className="text-center sm:text-left flex-1 w-full">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                    <div>
+                        <h1 className="text-3xl sm:text-4xl font-black text-foreground truncate tracking-tighter mb-1 flex items-center justify-center sm:justify-start gap-3">
+                            {displayName}
+                            <Badge className="bg-primary text-primary-foreground text-xs uppercase tracking-wider">VOS</Badge>
+                        </h1>
+                        <p className="text-sm text-muted-foreground font-medium flex items-center justify-center sm:justify-start gap-1.5 opacity-80">
+                            <CalendarDays className="w-3.5 h-3.5" /> Miembro desde: {new Date(profile.created_at || new Date()).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })}
+                        </p>
+                    </div>
+                    <div className="flex items-center justify-center sm:justify-end gap-3 mt-2 sm:mt-0">
+                      <Button variant="outline" size="icon" onClick={() => setIsPasswordModalOpen(true)}><Lock className="w-4 h-4" /></Button>
+                      <Button variant="outline" size="sm" onClick={() => { setNewUsername(profile.username || ""); setPreviewUrl(profile.avatar_url || null); setSelectedImage(null); setIsEditModalOpen(true); }}><Pencil className="w-4 h-4 mr-2" /> Editar</Button>
+                    </div>
                 </div>
-                <div>
-                  <p className="text-5xl font-black text-foreground mb-2 flex items-baseline gap-2 tracking-tight">
-                    {portfolioStats.totalPortfolioValue.toLocaleString()} <span className="text-xl text-muted-foreground font-bold">pts</span>
-                  </p>
-                  <p className={cn("text-sm font-bold flex items-center gap-1", isProfit ? "text-green-600 dark:text-[#00FF00]" : "text-red-600 dark:text-[#FF0000]")}>
-                    {isProfit ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                    {isProfit ? '+' : ''}{portfolioStats.totalPnl.toLocaleString()} pts ({isProfit ? '+' : ''}{portfolioStats.totalPnlPercentage.toFixed(2)}%)
-                  </p>
+
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 bg-background p-4 rounded-xl border border-border/50">
+                    <div className="flex flex-col col-span-2 md:col-span-1 md:border-r md:border-border/50 pr-4">
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1"><Wallet className="w-3 h-3" /> Portfolio Total</span>
+                        <span className="font-black text-2xl text-foreground">{portfolioStats.totalPortfolioValue.toLocaleString()} <span className="text-xs text-muted-foreground">pts</span></span>
+                    </div>
+                    <div className="flex flex-col"><span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Puntos Líquidos</span><span className="font-bold text-lg text-foreground">{profile.points?.toLocaleString() ?? 0}</span></div>
+                    <div className="flex flex-col"><span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Inversiones</span><span className="font-bold text-lg text-foreground">{bets.length}</span></div>
+                    <div className="flex flex-col"><span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Referidos</span><span className="font-bold text-lg text-foreground">{referredUsers.length}</span></div>
+                    <div className="flex flex-col"><span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Membresía</span><span className="font-bold text-lg text-primary">{profile.role === 'admin' ? 'Fundador' : 'Usuario'}</span></div>
                 </div>
-              </CardContent>
-            </Card>
+            </div>
+        </div>
 
-            <Card className="bg-card/50 backdrop-blur-sm border border-border/50 shadow-sm rounded-2xl overflow-hidden relative group">
-              
-              <div className="absolute bottom-0 left-0 w-full h-2/3 pointer-events-none opacity-40 group-hover:opacity-70 transition-opacity duration-500">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData}>
-                    <defs>
-                      <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={themeChartColor} stopOpacity={0.4}/>
-                        <stop offset="95%" stopColor={themeChartColor} stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <Area type="monotone" dataKey="value" stroke={themeChartColor} strokeWidth={3} fillOpacity={1} fill="url(#colorValue)" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-
-              <CardContent className="p-6 md:p-8 flex flex-col justify-between h-full relative z-10">
-                <div className="flex justify-between items-start mb-6">
-                  <div className={cn("flex items-center gap-2 font-bold", isProfit ? "text-green-600 dark:text-[#00FF00]" : "text-red-600 dark:text-[#FF0000]")}>
-                    {isProfit ? <ArrowUpRight className="w-5 h-5" /> : <ArrowDownRight className="w-5 h-5" />} PnL Activo
-                  </div>
-                  
-                  <div className="flex gap-1 bg-background/50 backdrop-blur-md rounded-lg p-1 border border-border/50 overflow-x-auto scrollbar-hide">
-                    {(['1D', '1W', '1M', '6M', '1Y', 'ALL'] as TimeframeType[]).map((tf) => (
-                      <button 
-                        key={tf}
-                        onClick={() => setTimeframe(tf)} 
-                        className={cn("px-2 py-1 text-xs font-bold rounded-md transition-all whitespace-nowrap", timeframe === tf ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}
-                      >
-                        {tf}
-                      </button>
-                    ))}
-                  </div>
+        {/* EL GRÁFICO FULL-WIDTH POLYMARKET STYLE */}
+        <Card className="bg-card border border-border/50 shadow-sm rounded-2xl overflow-hidden mb-12">
+          <CardContent className="p-0">
+            <div className="p-6 md:p-8 flex flex-col md:flex-row justify-between items-start md:items-end gap-6 border-b border-border/20">
+              <div>
+                <div className="flex items-center gap-2 font-bold text-muted-foreground mb-2">
+                  <TrendingUp className="w-4 h-4" /> Profit / Loss
                 </div>
                 
-                <div className="mt-8">
-                  <p className={cn("text-5xl font-black mb-2 flex items-baseline gap-2 tracking-tight drop-shadow-sm", isProfit ? "text-green-600 dark:text-[#00FF00]" : "text-red-600 dark:text-[#FF0000]")}>
-                    {isProfit ? '+' : ''}{portfolioStats.totalPnlPercentage.toFixed(2)}%
-                  </p>
-                  <p className="text-sm font-bold text-muted-foreground flex items-center gap-1.5 drop-shadow-sm">
-                    Inversiones de {timeframeLabels[timeframe]}
-                  </p>
+                <div className="flex items-baseline gap-3 flex-wrap">
+                  <span className={cn("text-4xl md:text-5xl font-black tracking-tight", isProfit ? "text-green-600 dark:text-[#00FF00]" : "text-red-600 dark:text-[#FF0000]")}>
+                    {isProfit ? '+' : ''}{dynamicPnl.value.toLocaleString()} <span className="text-2xl opacity-80">pts</span>
+                  </span>
+                  
+                  <Badge 
+                    variant="outline" 
+                    className={cn(
+                      "text-sm md:text-base px-2 py-0.5 font-bold border-2", 
+                      isProfit ? "bg-green-500/10 text-green-600 dark:text-[#00FF00] border-green-500/30 dark:border-[#00FF00]/30" : "bg-red-500/10 text-red-600 dark:text-[#FF0000] border-red-500/30 dark:border-[#FF0000]/30"
+                    )}
+                  >
+                    {isProfit ? '+' : ''}{dynamicPnl.percentage.toFixed(2)}%
+                  </Badge>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
 
-          <Card className="bg-card border-border/50 shadow-md rounded-2xl overflow-hidden mb-8">
-            <CardContent className="p-4 sm:p-6 md:p-8">
-              <Tabs defaultValue="active" className="w-full">
-                <TabsList className="grid w-full grid-cols-3 h-12 mb-8 bg-muted/50 rounded-lg p-1 border border-border/50">
-                  <TabsTrigger value="active" className="flex items-center gap-2 text-xs sm:text-sm font-bold rounded-md"><LineChart className="w-4 h-4" /><span className="hidden sm:inline">Inversiones Activas</span><Badge variant="secondary" className="font-black h-5 px-1 ml-1 text-xs">{bets.filter(b => getMarket(b) && ACTIVE_STATUSES.includes(String(getMarket(b)!.status).toLowerCase())).length}</Badge></TabsTrigger>
-                  <TabsTrigger value="finished" className="flex items-center gap-2 text-xs sm:text-sm font-bold rounded-md"><History className="w-4 h-4" /><span className="hidden sm:inline">Finalizadas</span></TabsTrigger>
-                  <TabsTrigger value="bank" className="flex items-center gap-2 text-xs sm:text-sm font-bold rounded-md"><Landmark className="w-4 h-4" /><span className="hidden sm:inline">Movimientos</span></TabsTrigger>
-                </TabsList>
+                <p className="text-sm font-medium text-muted-foreground mt-2">
+                  {dynamicPnl.value >= 0 ? 'Ganancia' : 'Pérdida'} en {timeframeLabels[timeframe]} • Total: {portfolioStats.totalPortfolioValue.toLocaleString()} pts
+                </p>
+              </div>
 
-                <TabsContent value="active" className="space-y-4">
-                  {isLoadingBets ? (
-                     <div className="flex items-center justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-primary opacity-60" /></div>
-                  ) : bets.filter((b) => getMarket(b) && ACTIVE_STATUSES.includes(String(getMarket(b)!.status).toLowerCase())).length === 0 ? (
-                    <div className="p-16 text-center text-muted-foreground bg-muted/10 border-2 border-dashed border-border/50 rounded-2xl">
-                      <LineChart className="w-16 h-16 mx-auto mb-5 opacity-20" />
-                      <p className="text-xl font-bold mb-2 text-foreground">Tu portfolio activo está vacío</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {bets.filter((b) => getMarket(b) && ACTIVE_STATUSES.includes(String(getMarket(b)!.status).toLowerCase())).map((bet) => {
-                          const market = getMarket(bet); const opt = bet.option_details;
-                          const isOldBinary = bet.outcome === "yes" || bet.outcome === "no";
-                          const displayOutcome = opt ? opt.option_name : (isOldBinary ? (bet.outcome === "yes" ? "SÍ" : "NO") : "Opción");
-                          const direction = (bet as any).direction || 'yes';
-                          const isOptBinary = ['sí', 'si', 'yes', 'no'].includes(displayOutcome.toLowerCase());
-                          let predictionText = isOptBinary ? (direction === 'no' ? (displayOutcome.toLowerCase().includes('s') ? 'No' : 'Sí') : displayOutcome) : `${direction === 'no' ? 'No' : 'Sí'} a ${displayOutcome}`;
-                          const isEffectivelyNo = direction === 'no' || (isOptBinary && displayOutcome.toLowerCase() === 'no' && direction === 'yes');
-                          
-                          let cashoutValue = 0, pnl = 0, pnlPercentage = 0;
-                          if (market) {
-                            const shares = Number((bet as any).shares || 0);
-                            cashoutValue = shares > 0 && opt ? calculateRealCashout(bet, market, opt) : Math.round(bet.amount * 0.95);
-                            pnl = cashoutValue - bet.amount; pnlPercentage = (pnl / bet.amount) * 100;
-                          }
+              <div className="flex bg-muted/50 p-1 rounded-xl backdrop-blur-md border border-border/30 w-full md:w-auto overflow-x-auto">
+                {(['1D', '1W', '1M', '6M', '1Y', 'ALL'] as TimeframeType[]).map((tf) => (
+                  <button 
+                    key={tf} 
+                    onClick={() => setTimeframe(tf)} 
+                    className={cn(
+                      "px-4 py-2 text-xs font-bold rounded-lg transition-all whitespace-nowrap flex-1 md:flex-none", 
+                      timeframe === tf ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {tf}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-                          return (
-                            <div key={bet.id} className="rounded-2xl border border-border/50 bg-card hover:border-primary/50 transition-all p-5 md:p-7 shadow-sm relative overflow-hidden group">
-                              <Link href={`/market/${bet.market_id}`} className="block"><p className="font-bold text-lg md:text-xl text-foreground line-clamp-2 mb-5 leading-tight group-hover:text-primary transition-colors pr-12">{market?.title ?? "Mercado"}</p></Link>
-                              <div className="flex flex-col md:flex-row md:items-center justify-between gap-5 md:gap-8 bg-muted/10 md:bg-transparent p-5 md:p-0 rounded-xl border md:border-none border-border/50">
-                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-5 md:gap-10">
-                                   <div className="flex flex-col"><p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1.5">Inversión</p><p className="font-black text-foreground text-xl md:text-2xl leading-none">{bet.amount.toLocaleString()} <span className="text-xs font-bold text-muted-foreground">pts</span></p></div>
-                                   <div className="flex flex-col"><p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1.5">Posición</p><Badge variant="outline" className={cn("text-xs md:text-sm font-bold border h-8 justify-center w-fit", isEffectivelyNo ? "bg-red-500/10 text-red-600 dark:text-red-500 border-red-500/30 dark:border-[#FF0000]/30" : "bg-green-500/10 text-green-600 dark:text-[#00FF00] border-green-500/30 dark:border-[#00FF00]/30")}>{predictionText}</Badge></div>
-                                   <div className="flex flex-col min-w-[90px] col-span-2 sm:col-span-1"><p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1.5 hidden md:block">Retorno</p>
-                                     <div className="flex items-center gap-2"><span className={cn("font-black text-xl md:text-2xl leading-none", pnl >= 0 ? "text-green-600 dark:text-[#00FF00]" : "text-red-600 dark:text-[#FF0000]")}>{pnl >= 0 ? "+" : ""}{pnlPercentage.toFixed(1)}%</span></div>
-                                   </div>
-                                </div>
-                                <div className="w-full md:w-auto mt-2 md:mt-0 pt-4 md:pt-0 border-t md:border-t-0 border-border/50">
-                                  <Button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setBetToSell({ id: bet.id, title: market?.title ?? "Mercado", outcomeName: predictionText, direction: direction, cashoutValue: cashoutValue, pnl: pnl, pnlPercentage: pnlPercentage }); }} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black h-11 px-7 w-full md:w-auto shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all rounded-full" ><Coins className="w-4 h-4 mr-2" /> Vender por {cashoutValue.toLocaleString()} pts</Button>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                    </div>
-                  )}
-                </TabsContent>
+            <div className="w-full h-[350px] md:h-[450px] p-4 md:p-6 pt-8">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={themeChartColor} stopOpacity={0.2}/>
+                      <stop offset="95%" stopColor={themeChartColor} stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  
+                  <XAxis 
+                    dataKey="timestamp" 
+                    type="number" 
+                    domain={['dataMin', 'dataMax']} 
+                    tickFormatter={xAxisFormatter}
+                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11, fontWeight: 500 }}
+                    tickLine={false}
+                    axisLine={false}
+                    minTickGap={60}
+                    dy={10}
+                  />
+                  
+                  <YAxis 
+                    domain={['auto', 'auto']} 
+                    tickFormatter={yAxisFormatter}
+                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11, fontWeight: 500 }}
+                    tickLine={false}
+                    axisLine={false}
+                    width={60}
+                    orientation="right"
+                  />
 
-                <TabsContent value="finished" className="space-y-4">
-                   {bets.filter((b) => getMarket(b) && FINISHED_STATUSES.includes(String(getMarket(b)!.status).toLowerCase())).length === 0 ? (
-                    <div className="p-12 text-center text-muted-foreground"><History className="w-12 h-12 mx-auto mb-4 opacity-20" /><p>Aún no hay resultados de tus apuestas.</p></div>
-                  ) : (
-                    <div className="space-y-4">
-                      {bets.filter((b) => getMarket(b) && FINISHED_STATUSES.includes(String(getMarket(b)!.status).toLowerCase())).map((bet) => {
-                          const market = getMarket(bet); const opt = bet.option_details; const direction = (bet as any).direction || 'yes';
-                          const displayOutcome = opt ? opt.option_name : 'Opción';
-                          const isOptBinary = ['sí', 'si', 'yes', 'no'].includes(displayOutcome.toLowerCase());
-                          let predictionText = isOptBinary ? (direction === 'no' ? (displayOutcome.toLowerCase().includes('s') ? 'No' : 'Sí') : displayOutcome) : `${direction === 'no' ? 'No' : 'Sí'} a ${displayOutcome}`;
-                          const isEffectivelyNo = direction === 'no' || (isOptBinary && displayOutcome.toLowerCase() === 'no' && direction === 'yes');
-                          const won = (direction === 'yes' && market?.winning_outcome === bet.outcome) || (direction === 'no' && market?.winning_outcome !== bet.outcome && market?.winning_outcome !== null);
+                  <Tooltip 
+                    formatter={customTooltipFormatter}
+                    labelFormatter={customTooltipLabelFormatter}
+                    contentStyle={{ 
+                        backgroundColor: 'hsl(var(--card))', 
+                        borderRadius: '12px', 
+                        border: '1px solid hsl(var(--border))', 
+                        boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
+                        color: 'hsl(var(--foreground))',
+                        fontWeight: 'bold',
+                        padding: '12px'
+                    }}
+                    itemStyle={{ color: themeChartColor, fontSize: '16px' }}
+                    labelStyle={{ color: 'hsl(var(--muted-foreground))', marginBottom: '4px', fontSize: '12px' }}
+                    cursor={{ stroke: 'hsl(var(--muted-foreground))', strokeWidth: 1, strokeDasharray: '4 4' }}
+                  />
+                  
+                  <Area 
+                    type="stepAfter" 
+                    dataKey="value" 
+                    stroke={themeChartColor} 
+                    strokeWidth={2.5} 
+                    fillOpacity={1} 
+                    fill="url(#colorValue)" 
+                    dot={false} 
+                    activeDot={{ r: 5, fill: themeChartColor, stroke: 'hsl(var(--background))', strokeWidth: 2 }} 
+                    isAnimationActive={false}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
 
-                          return (
-                            <div key={bet.id} className="rounded-xl border border-border/50 bg-muted/10 p-4 md:p-6 opacity-90">
-                              <p className="font-bold text-foreground line-clamp-2 mb-4">{market?.title ?? "Mercado"}</p>
-                              <div className="flex flex-col md:flex-row md:items-center justify-between bg-background p-4 rounded-lg border border-border/50 gap-4">
-                                 <div className="flex items-center gap-6 md:gap-10">
-                                   <div className="flex flex-col"><p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1">Inversión</p><p className="font-bold text-foreground text-base md:text-lg">{bet.amount.toLocaleString()} pts</p></div>
-                                   <div className="flex flex-col"><p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1">Predicción</p><Badge variant="outline" className={cn("text-xs font-bold border h-7", isEffectivelyNo ? "bg-red-500/10 text-red-600 dark:text-red-500 border-red-500/30" : "bg-green-500/10 text-green-600 dark:text-green-500 border-green-500/30")}>{predictionText}</Badge></div>
-                                 </div>
-                                 <div className="pt-2 md:pt-0 border-t md:border-t-0 border-border/50 w-full md:w-auto text-right">
-                                   {won ? <span className="font-black text-lg text-green-600 dark:text-[#00FF00] flex items-center justify-end gap-1.5"><CheckCircle2 className="w-5 h-5" /> Acertó</span> : <span className="font-black text-lg text-red-600 dark:text-[#FF0000] flex items-center justify-end gap-1.5 opacity-90"><XCircle className="w-5 h-5" /> Perdió</span>}
-                                 </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                    </div>
-                  )}
-                </TabsContent>
+        {/* HISTORIAL TABS: ACTIVAS / FINALIZADAS / MOVIMIENTOS */}
+        <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
+          <History className="w-6 h-6 text-primary" /> Tu Historial
+        </h2>
+        <Card className="bg-card border-border/50 shadow-md rounded-2xl overflow-hidden mb-8">
+          <CardContent className="p-4 sm:p-6 md:p-8">
+            <Tabs defaultValue="active" className="w-full">
+              <TabsList className="grid w-full grid-cols-3 h-12 mb-8 bg-muted/50 rounded-lg p-1 border border-border/50">
+                <TabsTrigger value="active" className="flex items-center gap-2 text-xs sm:text-sm font-bold rounded-md"><LineChart className="w-4 h-4" /><span className="hidden sm:inline">Inversiones Activas</span><Badge variant="secondary" className="font-black h-5 px-1 ml-1 text-xs">{bets.filter(b => getMarket(b) && ACTIVE_STATUSES.includes(String(getMarket(b)!.status).toLowerCase())).length}</Badge></TabsTrigger>
+                <TabsTrigger value="finished" className="flex items-center gap-2 text-xs sm:text-sm font-bold rounded-md"><History className="w-4 h-4" /><span className="hidden sm:inline">Finalizadas</span></TabsTrigger>
+                <TabsTrigger value="bank" className="flex items-center gap-2 text-xs sm:text-sm font-bold rounded-md"><Landmark className="w-4 h-4" /><span className="hidden sm:inline">Movimientos</span></TabsTrigger>
+              </TabsList>
 
-                <TabsContent value="bank" className="space-y-3">
-                  {isLoadingTransactions ? (
-                    <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
-                  ) : processedTransactions.length === 0 ? (
-                    <div className="text-center py-12 border-2 border-dashed border-border/50 rounded-xl bg-muted/10"><Landmark className="w-12 h-12 text-muted-foreground mx-auto mb-3 opacity-50" /><h3 className="font-semibold text-foreground mb-1 text-lg">No hay movimientos</h3></div>
-                  ) : (
-                    <div className="space-y-3">
-                      {processedTransactions.map((tx) => {
-                        const isPositive = tx.amount > 0;
-                        const isExpanded = expandedTx === tx.id;
+              <TabsContent value="active" className="space-y-4">
+                {isLoadingBets ? (
+                   <div className="flex items-center justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-primary opacity-60" /></div>
+                ) : bets.filter((b) => getMarket(b) && ACTIVE_STATUSES.includes(String(getMarket(b)!.status).toLowerCase())).length === 0 ? (
+                  <div className="p-16 text-center text-muted-foreground bg-muted/10 border-2 border-dashed border-border/50 rounded-2xl">
+                    <LineChart className="w-16 h-16 mx-auto mb-5 opacity-20" />
+                    <p className="text-xl font-bold mb-2 text-foreground">Tu portfolio activo está vacío</p>
+                    <Button size="lg" asChild className="mt-6 font-bold rounded-full">
+                      <Link href="/">Explorar Mercados</Link>
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {bets.filter((b) => getMarket(b) && ACTIVE_STATUSES.includes(String(getMarket(b)!.status).toLowerCase())).map((bet) => {
+                        const market = getMarket(bet); const opt = bet.option_details;
+                        const isOldBinary = bet.outcome === "yes" || bet.outcome === "no";
+                        const displayOutcome = opt ? opt.option_name : (isOldBinary ? (bet.outcome === "yes" ? "SÍ" : "NO") : "Opción");
+                        const direction = (bet as any).direction || 'yes';
+                        const isOptBinary = ['sí', 'si', 'yes', 'no'].includes(displayOutcome.toLowerCase());
+                        let predictionText = isOptBinary ? (direction === 'no' ? (displayOutcome.toLowerCase().includes('s') ? 'No' : 'Sí') : displayOutcome) : `${direction === 'no' ? 'No' : 'Sí'} a ${displayOutcome}`;
+                        const isEffectivelyNo = direction === 'no' || (isOptBinary && displayOutcome.toLowerCase() === 'no' && direction === 'yes');
+                        
+                        let cashoutValue = 0, pnl = 0, pnlPercentage = 0;
+                        if (market) {
+                          const shares = Number((bet as any).shares || 0);
+                          cashoutValue = shares > 0 && opt ? calculateRealCashout(bet, market, opt) : Math.round(bet.amount * 0.95);
+                          pnl = cashoutValue - bet.amount; pnlPercentage = (pnl / bet.amount) * 100;
+                        }
+
                         return (
-                          <div key={tx.id} onClick={() => setExpandedTx(isExpanded ? null : tx.id)} className="flex flex-col p-4 rounded-xl border border-border/50 bg-muted/10 hover:bg-muted/20 transition-all cursor-pointer group">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-4">
-                                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isPositive ? 'bg-green-500/20 text-green-600 dark:text-[#00FF00]' : 'bg-red-500/20 text-red-600 dark:text-[#FF0000]'}`}>
-                                  {isPositive ? <TrendingUp className="w-5 h-5" /> : <TrendingDown className="w-5 h-5" />}
-                                </div>
-                                <div>
-                                  <p className="text-base font-semibold text-foreground">{tx.description}</p>
-                                  <p className="text-xs text-muted-foreground uppercase font-medium mt-0.5 flex items-center gap-1">{new Date(tx.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</p>
-                                </div>
+                          <div key={bet.id} className="rounded-2xl border border-border/50 bg-card hover:border-primary/50 transition-all p-5 md:p-7 shadow-sm relative overflow-hidden group">
+                            <Link href={`/market/${bet.market_id}`} className="block"><p className="font-bold text-lg md:text-xl text-foreground line-clamp-2 mb-5 leading-tight group-hover:text-primary transition-colors pr-12">{market?.title ?? "Mercado"}</p></Link>
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-5 md:gap-8 bg-muted/10 md:bg-transparent p-5 md:p-0 rounded-xl border md:border-none border-border/50">
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-5 md:gap-10">
+                                 <div className="flex flex-col"><p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1.5">Inversión</p><p className="font-black text-foreground text-xl md:text-2xl leading-none">{bet.amount.toLocaleString()} <span className="text-xs font-bold text-muted-foreground">pts</span></p></div>
+                                 <div className="flex flex-col"><p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1.5">Posición</p><Badge variant="outline" className={cn("text-xs md:text-sm font-bold border h-8 justify-center w-fit", isEffectivelyNo ? "bg-red-500/10 text-red-600 dark:text-red-500 border-red-500/30 dark:border-[#FF0000]/30" : "bg-green-500/10 text-green-600 dark:text-[#00FF00] border-green-500/30 dark:border-[#00FF00]/30")}>{predictionText}</Badge></div>
+                                 <div className="flex flex-col min-w-[90px] col-span-2 sm:col-span-1"><p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1.5 hidden md:block">Retorno</p>
+                                   <div className="flex items-center gap-2"><span className={cn("font-black text-xl md:text-2xl leading-none", pnl >= 0 ? "text-green-600 dark:text-[#00FF00]" : "text-red-600 dark:text-[#FF0000]")}>{pnl >= 0 ? "+" : ""}{pnlPercentage.toFixed(1)}%</span></div>
+                                 </div>
                               </div>
-                              <div className="flex items-center gap-3">
-                                <div className={`text-xl font-black ${isPositive ? 'text-green-600 dark:text-[#00FF00]' : 'text-red-600 dark:text-[#FF0000]'}`}>{isPositive ? '+' : ''}{tx.amount.toLocaleString()} pts</div>
-                                {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground opacity-50 group-hover:opacity-100 transition-opacity" />}
+                              
+                              {/* BOTÓN DE VENDER - MAGIA PURA */}
+                              <div className="w-full md:w-auto mt-2 md:mt-0 pt-4 md:pt-0 border-t md:border-t-0 border-border/50">
+                                <Button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setBetToSell({ id: bet.id, title: market?.title ?? "Mercado", outcomeName: predictionText, direction: direction, cashoutValue: cashoutValue, pnl: pnl, pnlPercentage: pnlPercentage }); }} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black h-11 px-7 w-full md:w-auto shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all rounded-full" ><Coins className="w-4 h-4 mr-2" /> Vender por {cashoutValue.toLocaleString()} pts</Button>
                               </div>
                             </div>
-                            {isExpanded && (
-                              <div className="mt-4 pt-4 border-t border-border/50 grid grid-cols-3 gap-2 text-center animate-in fade-in slide-in-from-top-2">
-                                <div className="bg-background/50 p-2 rounded-lg"><p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1">Saldo Anterior</p><p className="font-semibold text-foreground">{tx.balanceBefore.toLocaleString()} pts</p></div>
-                                <div className="bg-background/50 p-2 rounded-lg"><p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1">Monto</p><p className={`font-black ${isPositive ? 'text-green-600 dark:text-[#00FF00]' : 'text-red-600 dark:text-[#FF0000]'}`}>{isPositive ? '+' : ''}{tx.amount.toLocaleString()} pts</p></div>
-                                <div className="bg-primary/10 border border-primary/20 p-2 rounded-lg"><p className="text-[10px] text-primary font-bold uppercase tracking-wider mb-1">Saldo Actualizado</p><p className="font-black text-primary">{tx.balanceAfter.toLocaleString()} pts</p></div>
-                              </div>
-                            )}
                           </div>
                         );
                       })}
-                    </div>
-                  )}
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
-
-          {/* LA TRAMPA DE OSOS: BLOQUE DE REFERIDOS */}
-          <Card className="bg-gradient-to-br from-primary/10 via-background to-background border-primary/20 shadow-md rounded-2xl mb-8 overflow-hidden">
-            <CardContent className="p-6 md:p-8">
-              <div className="flex flex-col md:flex-row items-center gap-6">
-                <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center shrink-0"><Gift className="w-8 h-8 text-primary" /></div>
-                <div className="flex-1 text-center md:text-left">
-                  <h3 className="text-2xl font-bold text-foreground mb-2">¡Invitá amigos y ganá puntos!</h3>
-                  <p className="text-muted-foreground text-sm max-w-xl">Ganá <strong className="text-primary">2.000 pts</strong> por cada amigo que se registre con tu link. Además, ganás <strong className="text-primary">500 pts extras</strong> cada vez que ellos inviten a alguien más. Tu amigo recibe 1.000 pts de bienvenida.</p>
-                </div>
-                <div className="w-full md:w-auto mt-4 md:mt-0 flex flex-col gap-2">
-                  <div className="relative">
-                    <Input readOnly value={referralLink} className="pr-12 bg-background border-border/50 font-medium text-muted-foreground w-full md:w-80" />
-                    <Button size="icon" variant="ghost" className="absolute right-0 top-0 h-full w-12 hover:bg-transparent" onClick={handleCopyLink}>{isCopied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4 text-muted-foreground" />}</Button>
                   </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="finished" className="space-y-4">
+                 {bets.filter((b) => getMarket(b) && FINISHED_STATUSES.includes(String(getMarket(b)!.status).toLowerCase())).length === 0 ? (
+                  <div className="p-12 text-center text-muted-foreground"><History className="w-12 h-12 mx-auto mb-4 opacity-20" /><p>Aún no hay resultados de tus apuestas.</p></div>
+                ) : (
+                  <div className="space-y-4">
+                    {bets.filter((b) => getMarket(b) && FINISHED_STATUSES.includes(String(getMarket(b)!.status).toLowerCase())).map((bet) => {
+                        const market = getMarket(bet); const opt = bet.option_details; const direction = (bet as any).direction || 'yes';
+                        const displayOutcome = opt ? opt.option_name : 'Opción';
+                        const isOptBinary = ['sí', 'si', 'yes', 'no'].includes(displayOutcome.toLowerCase());
+                        let predictionText = isOptBinary ? (direction === 'no' ? (displayOutcome.toLowerCase().includes('s') ? 'No' : 'Sí') : displayOutcome) : `${direction === 'no' ? 'No' : 'Sí'} a ${displayOutcome}`;
+                        const isEffectivelyNo = direction === 'no' || (isOptBinary && displayOutcome.toLowerCase() === 'no' && direction === 'yes');
+                        const won = (direction === 'yes' && market?.winning_outcome === bet.outcome) || (direction === 'no' && market?.winning_outcome !== bet.outcome && market?.winning_outcome !== null);
+
+                        return (
+                          <div key={bet.id} className="rounded-xl border border-border/50 bg-muted/10 p-4 md:p-6 opacity-90">
+                            <p className="font-bold text-foreground line-clamp-2 mb-4">{market?.title ?? "Mercado"}</p>
+                            <div className="flex flex-col md:flex-row md:items-center justify-between bg-background p-4 rounded-lg border border-border/50 gap-4">
+                               <div className="flex items-center gap-6 md:gap-10">
+                                 <div className="flex flex-col"><p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1">Inversión</p><p className="font-bold text-foreground text-base md:text-lg">{bet.amount.toLocaleString()} pts</p></div>
+                                 <div className="flex flex-col"><p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1">Predicción</p><Badge variant="outline" className={cn("text-xs font-bold border h-7", isEffectivelyNo ? "bg-red-500/10 text-red-600 dark:text-red-500 border-red-500/30" : "bg-green-500/10 text-green-600 dark:text-green-500 border-green-500/30")}>{predictionText}</Badge></div>
+                               </div>
+                               <div className="pt-2 md:pt-0 border-t md:border-t-0 border-border/50 w-full md:w-auto text-right">
+                                 {won ? <span className="font-black text-lg text-green-600 dark:text-[#00FF00] flex items-center justify-end gap-1.5"><CheckCircle2 className="w-5 h-5" /> Acertó</span> : <span className="font-black text-lg text-red-600 dark:text-[#FF0000] flex items-center justify-end gap-1.5 opacity-90"><XCircle className="w-5 h-5" /> Perdió</span>}
+                               </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="bank" className="space-y-3">
+                {isLoadingTransactions ? (
+                  <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
+                ) : processedTransactions.length === 0 ? (
+                  <div className="text-center py-12 border-2 border-dashed border-border/50 rounded-xl bg-muted/10"><Landmark className="w-12 h-12 text-muted-foreground mx-auto mb-3 opacity-50" /><h3 className="font-semibold text-foreground mb-1 text-lg">No hay movimientos</h3></div>
+                ) : (
+                  <div className="space-y-3">
+                    {processedTransactions.map((tx) => {
+                      const isPositive = tx.amount > 0;
+                      const isExpanded = expandedTx === tx.id;
+                      return (
+                        <div key={tx.id} onClick={() => setExpandedTx(isExpanded ? null : tx.id)} className="flex flex-col p-4 rounded-xl border border-border/50 bg-muted/10 hover:bg-muted/20 transition-all cursor-pointer group">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                              <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isPositive ? 'bg-green-500/20 text-green-600 dark:text-[#00FF00]' : 'bg-red-500/20 text-red-600 dark:text-[#FF0000]'}`}>
+                                {isPositive ? <TrendingUp className="w-5 h-5" /> : <TrendingDown className="w-5 h-5" />}
+                              </div>
+                              <div>
+                                <p className="text-base font-semibold text-foreground">{tx.description}</p>
+                                <p className="text-xs text-muted-foreground uppercase font-medium mt-0.5 flex items-center gap-1">{new Date(tx.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <div className={`text-xl font-black ${isPositive ? 'text-green-600 dark:text-[#00FF00]' : 'text-red-600 dark:text-[#FF0000]'}`}>{isPositive ? '+' : ''}{tx.amount.toLocaleString()} pts</div>
+                              {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground opacity-50 group-hover:opacity-100 transition-opacity" />}
+                            </div>
+                          </div>
+                          {isExpanded && (
+                            <div className="mt-4 pt-4 border-t border-border/50 grid grid-cols-3 gap-2 text-center animate-in fade-in slide-in-from-top-2">
+                              <div className="bg-background/50 p-2 rounded-lg"><p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1">Saldo Anterior</p><p className="font-semibold text-foreground">{tx.balanceBefore.toLocaleString()} pts</p></div>
+                              <div className="bg-background/50 p-2 rounded-lg"><p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1">Monto</p><p className={`font-black ${isPositive ? 'text-green-600 dark:text-[#00FF00]' : 'text-red-600 dark:text-[#FF0000]'}`}>{isPositive ? '+' : ''}{tx.amount.toLocaleString()} pts</p></div>
+                              <div className="bg-primary/10 border border-primary/20 p-2 rounded-lg"><p className="text-[10px] text-primary font-bold uppercase tracking-wider mb-1">Saldo Actualizado</p><p className="font-black text-primary">{tx.balanceAfter.toLocaleString()} pts</p></div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
+
+        {/* LA TRAMPA DE OSOS: BLOQUE DE REFERIDOS */}
+        <Card className="bg-gradient-to-br from-primary/10 via-background to-background border-primary/20 shadow-md rounded-2xl mb-8 overflow-hidden">
+          <CardContent className="p-6 md:p-8">
+            <div className="flex flex-col md:flex-row items-center gap-6">
+              <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center shrink-0"><Gift className="w-8 h-8 text-primary" /></div>
+              <div className="flex-1 text-center md:text-left">
+                <h3 className="text-2xl font-bold text-foreground mb-2">¡Invitá amigos y ganá puntos!</h3>
+                <p className="text-muted-foreground text-sm max-w-xl">Ganá <strong className="text-primary">2.000 pts</strong> por cada amigo que se registre con tu link. Además, ganás <strong className="text-primary">500 pts extras</strong> cada vez que ellos inviten a alguien más. Tu amigo recibe 1.000 pts de bienvenida.</p>
+              </div>
+              <div className="w-full md:w-auto mt-4 md:mt-0 flex flex-col gap-2">
+                <div className="relative">
+                  <Input readOnly value={referralLink} className="pr-12 bg-background border-border/50 font-medium text-muted-foreground w-full md:w-80" />
+                  <Button size="icon" variant="ghost" className="absolute right-0 top-0 h-full w-12 hover:bg-transparent" onClick={handleCopyLink}>{isCopied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4 text-muted-foreground" />}</Button>
                 </div>
               </div>
-              {referredUsers.length > 0 && (
-                <div className="mt-8 pt-6 border-t border-border/50 w-full">
-                  <h4 className="text-sm font-bold text-foreground mb-4 flex items-center gap-2"><Users className="w-4 h-4 text-primary" /> Tus Referidos ({referredUsers.length})</h4>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                    {referredUsers.map((user, i) => (
-                      <div key={i} className="flex items-center gap-3 bg-background/50 border border-border/50 rounded-lg p-3 hover:border-primary/30 transition-colors">
-                        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold shrink-0">{user.username.charAt(0).toUpperCase()}</div>
-                        <div className="min-w-0"><p className="font-bold text-sm text-foreground truncate">{user.username}</p><p className="text-[10px] text-muted-foreground uppercase">Usuario Activo</p></div>
-                      </div>
-                    ))}
-                  </div>
+            </div>
+            {referredUsers.length > 0 && (
+              <div className="mt-8 pt-6 border-t border-border/50 w-full">
+                <h4 className="text-sm font-bold text-foreground mb-4 flex items-center gap-2"><Users className="w-4 h-4 text-primary" /> Tus Referidos ({referredUsers.length})</h4>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {referredUsers.map((user, i) => (
+                    <div key={i} className="flex items-center gap-3 bg-background/50 border border-border/50 rounded-lg p-3 hover:border-primary/30 transition-colors">
+                      <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold shrink-0">{user.username.charAt(0).toUpperCase()}</div>
+                      <div className="min-w-0"><p className="font-bold text-sm text-foreground truncate">{user.username}</p><p className="text-[10px] text-muted-foreground uppercase">Usuario Activo</p></div>
+                    </div>
+                  ))}
                 </div>
-              )}
-            </CardContent>
-          </Card>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
-        </div>
       </main>
 
       {/* MODALES DE ACCIÓN */}
@@ -547,7 +702,7 @@ export default function ProfilePage() {
       </Dialog>
       
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>Editar Perfil</DialogTitle></DialogHeader><form onSubmit={handleSaveProfile} className="space-y-4 pt-4"><div className="flex flex-col items-center gap-4 mb-6"><div className="relative w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center border-2 border-border overflow-hidden">{previewUrl ? <img src={previewUrl} alt="Avatar" className="w-full h-full object-cover" /> : <User className="w-10 h-10 text-primary opacity-50" />}<div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity cursor-pointer" onClick={() => fileInputRef.current?.click()}><Camera className="w-6 h-6 text-white" /></div></div><input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => { if (e.target.files && e.target.files[0]) { setSelectedImage(e.target.files[0]); setPreviewUrl(URL.createObjectURL(e.target.files[0])); } }} /><Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>Cambiar foto</Button></div><div className="space-y-2"><Label htmlFor="username">Nombre de usuario</Label><Input id="username" value={newUsername} onChange={(e) => setNewUsername(e.target.value)} required /></div><Button type="submit" className="w-full mt-4" disabled={isSaving}>{isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null} Guardar Cambios</Button></form></DialogContent>
+        <DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>Editar Perfil</DialogTitle></DialogHeader><form onSubmit={handleSaveProfile} className="space-y-4 pt-4"><div className="flex flex-col items-center gap-4 mb-6"><div className="relative w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center border-2 border-border overflow-hidden">{previewUrl ? <img src={previewUrl} alt="Avatar" className="w-full h-full object-cover" /> : <UserIcon className="w-10 h-10 text-primary opacity-50" />}<div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity cursor-pointer" onClick={() => fileInputRef.current?.click()}><Camera className="w-6 h-6 text-white" /></div></div><input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => { if (e.target.files && e.target.files[0]) { setSelectedImage(e.target.files[0]); setPreviewUrl(URL.createObjectURL(e.target.files[0])); } }} /><Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>Cambiar foto</Button></div><div className="space-y-2"><Label htmlFor="username">Nombre de usuario</Label><Input id="username" value={newUsername} onChange={(e) => setNewUsername(e.target.value)} required /></div><Button type="submit" className="w-full mt-4" disabled={isSaving}>{isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null} Guardar Cambios</Button></form></DialogContent>
       </Dialog>
 
       <Dialog open={isPasswordModalOpen} onOpenChange={setIsPasswordModalOpen}>
