@@ -46,7 +46,6 @@ export default function RankingPage() {
     if (!error && data) {
       setUsers(data as LeaderboardUser[]);
     } else {
-      // Ahora si hay error, nos va a decir exactamente qué pasó
       console.error("Error cargando ranking:", error?.message || error);
     }
     setIsLoading(false);
@@ -61,11 +60,11 @@ export default function RankingPage() {
   const topVolume = useMemo(() => [...users].sort((a, b) => b.total_volume - a.total_volume).slice(0, 50), [users]);
   const topPredictions = useMemo(() => [...users].sort((a, b) => b.total_predictions - a.total_predictions).slice(0, 50), [users]);
 
-  // Función para renderizar medallas Top 3
+  // Función para renderizar medallas Top 3 adaptadas a modo claro/oscuro
   const renderRankBadge = (index: number) => {
-    if (index === 0) return <div className="w-6 h-6 rounded-full bg-yellow-500/20 text-yellow-500 flex items-center justify-center font-bold text-xs shrink-0"><Medal className="w-3 h-3" /></div>;
-    if (index === 1) return <div className="w-6 h-6 rounded-full bg-gray-400/20 text-gray-400 flex items-center justify-center font-bold text-xs shrink-0"><Medal className="w-3 h-3" /></div>;
-    if (index === 2) return <div className="w-6 h-6 rounded-full bg-amber-600/20 text-amber-600 flex items-center justify-center font-bold text-xs shrink-0"><Medal className="w-3 h-3" /></div>;
+    if (index === 0) return <div className="w-6 h-6 rounded-full bg-amber-500/20 dark:bg-yellow-500/20 text-amber-600 dark:text-yellow-500 flex items-center justify-center font-bold text-xs shrink-0"><Medal className="w-3 h-3" /></div>;
+    if (index === 1) return <div className="w-6 h-6 rounded-full bg-slate-400/20 dark:bg-gray-400/20 text-slate-600 dark:text-gray-400 flex items-center justify-center font-bold text-xs shrink-0"><Medal className="w-3 h-3" /></div>;
+    if (index === 2) return <div className="w-6 h-6 rounded-full bg-orange-600/20 dark:bg-amber-600/20 text-orange-700 dark:text-amber-600 flex items-center justify-center font-bold text-xs shrink-0"><Medal className="w-3 h-3" /></div>;
     return <div className="w-6 h-6 rounded-full bg-muted text-muted-foreground flex items-center justify-center font-bold text-[10px] shrink-0">{index + 1}</div>;
   };
 
@@ -93,7 +92,7 @@ export default function RankingPage() {
 
         <div className="mb-8 md:mb-12">
           <h1 className="text-3xl md:text-4xl font-black text-foreground flex items-center gap-3">
-            <Trophy className="w-8 h-8 text-[#FFD700]" /> Leaderboard
+            <Trophy className="w-8 h-8 text-amber-500 dark:text-[#FFD700]" /> Leaderboard
           </h1>
           <p className="text-muted-foreground mt-2 text-sm md:text-base">
             Descubrí quiénes son los mejores traders de PREDIX rankeados por su Poder de Fuego (Portfolio Total), volumen y actividad.
@@ -111,7 +110,7 @@ export default function RankingPage() {
             {/* COLUMNA 1: PORTFOLIO TOTAL (PODER DE FUEGO) */}
             <div className="bg-card/50 border border-border/50 rounded-2xl p-4 md:p-6 shadow-sm flex flex-col h-[70vh] min-h-[500px]">
               <div className="flex items-center gap-3 mb-4 border-b border-border/50 pb-4 sticky top-0 bg-card/90 backdrop-blur z-10">
-                <div className="w-8 h-8 rounded-lg bg-[#FFD700]/20 flex items-center justify-center text-[#FFD700] shrink-0">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/10 dark:bg-[#FFD700]/20 flex items-center justify-center text-amber-600 dark:text-[#FFD700] shrink-0">
                   <Wallet className="w-4 h-4" />
                 </div>
                 <h2 className="text-lg font-bold text-foreground">Portfolio Total</h2>
@@ -119,13 +118,13 @@ export default function RankingPage() {
               <div className="flex-1 overflow-y-auto pr-2 space-y-1 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
                 {topPortfolio.map((user, i) => (
                   <Link href={`/profile/${user.user_id}`} key={`pts-${user.user_id}`}>
-                    <div className={cn("flex items-center justify-between p-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer", currentUser?.id === user.user_id && "bg-[#FFD700]/10 border border-[#FFD700]/20 hover:bg-[#FFD700]/10")}>
+                    <div className={cn("flex items-center justify-between p-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer", currentUser?.id === user.user_id && "bg-amber-500/10 border border-amber-500/20 dark:bg-[#FFD700]/10 dark:border-[#FFD700]/20 hover:bg-amber-500/20 dark:hover:bg-[#FFD700]/20")}>
                       <div className="flex items-center gap-3 overflow-hidden">
                         {renderRankBadge(i)}
-                        <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center overflow-hidden shrink-0 border border-border/50">
+                        <div className="w-7 h-7 rounded-full bg-primary/10 dark:bg-primary/20 flex items-center justify-center overflow-hidden shrink-0 border border-border/50">
                           {user.avatar_url ? <img src={user.avatar_url} alt="av" className="w-full h-full object-cover" /> : <User className="w-3 h-3 text-primary" />}
                         </div>
-                        <span className={cn("font-medium text-sm truncate", currentUser?.id === user.user_id ? "text-[#FFD700] font-bold" : "text-foreground")}>
+                        <span className={cn("font-medium text-sm truncate", currentUser?.id === user.user_id ? "text-amber-600 dark:text-[#FFD700] font-bold" : "text-foreground")}>
                           {user.username}
                         </span>
                       </div>
@@ -141,7 +140,7 @@ export default function RankingPage() {
             {/* COLUMNA 2: VOLUMEN */}
             <div className="bg-card/50 border border-border/50 rounded-2xl p-4 md:p-6 shadow-sm flex flex-col h-[70vh] min-h-[500px]">
               <div className="flex items-center gap-3 mb-4 border-b border-border/50 pb-4 sticky top-0 bg-card/90 backdrop-blur z-10">
-                <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center text-blue-500 shrink-0">
+                <div className="w-8 h-8 rounded-lg bg-blue-600/10 dark:bg-blue-500/20 flex items-center justify-center text-blue-600 dark:text-blue-500 shrink-0">
                   <BarChart3 className="w-4 h-4" />
                 </div>
                 <h2 className="text-lg font-bold text-foreground">Volumen Tradeado</h2>
@@ -149,17 +148,17 @@ export default function RankingPage() {
               <div className="flex-1 overflow-y-auto pr-2 space-y-1 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
                 {topVolume.map((user, i) => (
                   <Link href={`/profile/${user.user_id}`} key={`vol-${user.user_id}`}>
-                    <div className={cn("flex items-center justify-between p-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer", currentUser?.id === user.user_id && "bg-blue-500/10 border border-blue-500/20 hover:bg-blue-500/10")}>
+                    <div className={cn("flex items-center justify-between p-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer", currentUser?.id === user.user_id && "bg-blue-600/10 border border-blue-600/20 dark:bg-blue-500/10 dark:border-blue-500/20 hover:bg-blue-600/20 dark:hover:bg-blue-500/20")}>
                       <div className="flex items-center gap-3 overflow-hidden">
                         {renderRankBadge(i)}
-                        <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center overflow-hidden shrink-0 border border-border/50">
+                        <div className="w-7 h-7 rounded-full bg-primary/10 dark:bg-primary/20 flex items-center justify-center overflow-hidden shrink-0 border border-border/50">
                           {user.avatar_url ? <img src={user.avatar_url} alt="av" className="w-full h-full object-cover" /> : <User className="w-3 h-3 text-primary" />}
                         </div>
-                        <span className={cn("font-medium text-sm truncate", currentUser?.id === user.user_id ? "text-blue-500 font-bold" : "text-foreground")}>
+                        <span className={cn("font-medium text-sm truncate", currentUser?.id === user.user_id ? "text-blue-600 dark:text-blue-500 font-bold" : "text-foreground")}>
                           {user.username}
                         </span>
                       </div>
-                      <span className="font-bold text-sm text-blue-500 shrink-0 pl-2">
+                      <span className="font-bold text-sm text-blue-600 dark:text-blue-500 shrink-0 pl-2">
                         {user.total_volume.toLocaleString()}
                       </span>
                     </div>
@@ -171,7 +170,7 @@ export default function RankingPage() {
             {/* COLUMNA 3: PREDICCIONES */}
             <div className="bg-card/50 border border-border/50 rounded-2xl p-4 md:p-6 shadow-sm flex flex-col h-[70vh] min-h-[500px]">
               <div className="flex items-center gap-3 mb-4 border-b border-border/50 pb-4 sticky top-0 bg-card/90 backdrop-blur z-10">
-                <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center text-purple-500 shrink-0">
+                <div className="w-8 h-8 rounded-lg bg-purple-600/10 dark:bg-purple-500/20 flex items-center justify-center text-purple-600 dark:text-purple-500 shrink-0">
                   <Target className="w-4 h-4" />
                 </div>
                 <h2 className="text-lg font-bold text-foreground">Predicciones</h2>
@@ -179,17 +178,17 @@ export default function RankingPage() {
               <div className="flex-1 overflow-y-auto pr-2 space-y-1 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
                 {topPredictions.map((user, i) => (
                   <Link href={`/profile/${user.user_id}`} key={`pred-${user.user_id}`}>
-                    <div className={cn("flex items-center justify-between p-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer", currentUser?.id === user.user_id && "bg-purple-500/10 border border-purple-500/20 hover:bg-purple-500/10")}>
+                    <div className={cn("flex items-center justify-between p-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer", currentUser?.id === user.user_id && "bg-purple-600/10 border border-purple-600/20 dark:bg-purple-500/10 dark:border-purple-500/20 hover:bg-purple-600/20 dark:hover:bg-purple-500/20")}>
                       <div className="flex items-center gap-3 overflow-hidden">
                         {renderRankBadge(i)}
-                        <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center overflow-hidden shrink-0 border border-border/50">
+                        <div className="w-7 h-7 rounded-full bg-primary/10 dark:bg-primary/20 flex items-center justify-center overflow-hidden shrink-0 border border-border/50">
                           {user.avatar_url ? <img src={user.avatar_url} alt="av" className="w-full h-full object-cover" /> : <User className="w-3 h-3 text-primary" />}
                         </div>
-                        <span className={cn("font-medium text-sm truncate", currentUser?.id === user.user_id ? "text-purple-500 font-bold" : "text-foreground")}>
+                        <span className={cn("font-medium text-sm truncate", currentUser?.id === user.user_id ? "text-purple-600 dark:text-purple-500 font-bold" : "text-foreground")}>
                           {user.username}
                         </span>
                       </div>
-                      <span className="font-bold text-sm text-purple-500 shrink-0 pl-2">
+                      <span className="font-bold text-sm text-purple-600 dark:text-purple-500 shrink-0 pl-2">
                         {user.total_predictions.toLocaleString()}
                       </span>
                     </div>
