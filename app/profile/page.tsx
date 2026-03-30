@@ -182,7 +182,6 @@ export default function ProfilePage() {
     });
   }, [transactions, profile?.points]);
 
-  // LA MAGIA DEL GRÁFICO (Idéntica al perfil público)
   const chartData = useMemo(() => {
     const chronological = [...processedTransactions].reverse(); 
     const offset = portfolioStats.lockedValueOffset; 
@@ -248,7 +247,10 @@ export default function ProfilePage() {
             baseBalance = profile?.points || 0;
         }
         
-        return { timestamp: ts, value: baseBalance + offset };
+        let val = baseBalance + offset;
+        val = Math.max(0, val);
+        
+        return { timestamp: ts, value: val };
     });
 
     if (data.length === 0 || data[data.length - 1].timestamp !== now) {
@@ -258,7 +260,6 @@ export default function ProfilePage() {
     return data;
   }, [processedTransactions, timeframe, portfolioStats, profile]);
 
-  // MOTOR PNL ABSOLUTO (CORREGIDO PARA MOSTRAR GANANCIAS CORRECTAS DESDE CERO)
   const dynamicPnl = useMemo(() => {
     if (chartData.length < 2) return { value: 0, percentage: 0 };
     
@@ -329,6 +330,12 @@ export default function ProfilePage() {
 
   const isProfit = dynamicPnl.value >= 0;
   const themeChartColor = isProfit ? (isDarkMode ? "#00FF00" : "#16a34a") : (isDarkMode ? "#FF0000" : "#dc2626");
+  
+  // COLORES DINÁMICOS PARA EL GRÁFICO
+  const axisTextColor = isDarkMode ? '#a1a1aa' : '#64748b'; // Gris claro en dark, gris oscuro en light
+  const axisLineColor = isDarkMode ? '#334155' : '#e2e8f0'; // Borde sutil
+  const tooltipBgColor = isDarkMode ? '#0f172a' : '#ffffff'; // Fondo oscuro o blanco
+  const tooltipTextColor = isDarkMode ? '#f8fafc' : '#0f172a';
 
   if (isChecking) return <div className="min-h-screen bg-background flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   if (!profile) return null;
@@ -347,7 +354,6 @@ export default function ProfilePage() {
           <Badge className="bg-primary/10 text-primary border-primary/20 font-medium">Área Personal</Badge>
         </div>
 
-        {/* CABECERA UNIFICADA DE MI PERFIL */}
         <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 mb-10">
             <Avatar className="w-24 h-24 sm:w-28 sm:h-28 border-4 border-background bg-primary/10 shadow-lg shrink-0">
                 {profile.avatar_url ? <AvatarImage src={profile.avatar_url} className="object-cover" /> : <AvatarFallback><UserIcon className="w-12 h-12 text-primary opacity-50" /></AvatarFallback>}
@@ -371,9 +377,7 @@ export default function ProfilePage() {
             </div>
         </div>
 
-        {/* NUEVA SECCIÓN DE ESTADÍSTICAS OPTIMIZADA CON TARJETAS GIGANTES */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-5 mb-12">
-            {/* PORTFOLIO TOTAL */}
             <Card className="bg-primary/5 border border-primary/20 rounded-2xl p-6 flex flex-col items-center text-center shadow-sm">
                 <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-4"><Wallet className="w-5 h-5" /></div>
                 <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Portfolio Total</p>
@@ -381,7 +385,6 @@ export default function ProfilePage() {
                 <p className="text-xs text-muted-foreground font-bold">pts</p>
             </Card>
 
-            {/* PUNTOS LÍQUIDOS */}
             <Card className="bg-card border border-border/50 rounded-2xl p-6 flex flex-col items-center text-center shadow-sm">
                 <div className="w-10 h-10 rounded-full bg-green-500/10 flex items-center justify-center text-green-600 dark:text-[#00FF00] mb-4"><Coins className="w-5 h-5" /></div>
                 <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Puntos Líquidos</p>
@@ -389,7 +392,6 @@ export default function ProfilePage() {
                 <p className="text-xs text-muted-foreground font-bold">pts</p>
             </Card>
 
-            {/* INVERSIONES */}
             <Card className="bg-card border border-border/50 rounded-2xl p-6 flex flex-col items-center text-center shadow-sm">
                 <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-600 mb-4"><LineChart className="w-5 h-5" /></div>
                 <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Inversiones</p>
@@ -397,7 +399,6 @@ export default function ProfilePage() {
                 <p className="text-xs text-muted-foreground font-bold">operaciones</p>
             </Card>
 
-            {/* REFERIDOS */}
             <Card className="bg-card border border-border/50 rounded-2xl p-6 flex flex-col items-center text-center shadow-sm">
                 <div className="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center text-amber-600 mb-4"><Users className="w-5 h-5" /></div>
                 <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Referidos</p>
@@ -405,7 +406,6 @@ export default function ProfilePage() {
                 <p className="text-xs text-muted-foreground font-bold">usuarios</p>
             </Card>
 
-            {/* MEMBRESÍA */}
             <Card className={cn("border rounded-2xl p-6 flex flex-col items-center text-center shadow-sm", profile.role === 'admin' ? "bg-green-500/10 border-green-500/30" : "bg-card border-border/50")}>
                 <div className={cn("w-10 h-10 rounded-full flex items-center justify-center mb-4", profile.role === 'admin' ? "bg-green-500/20 text-green-600 dark:text-[#00FF00]" : "bg-muted/30 text-muted-foreground")}><Trophy className="w-5 h-5" /></div>
                 <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Membresía</p>
@@ -414,13 +414,12 @@ export default function ProfilePage() {
             </Card>
         </div>
 
-        {/* EL GRÁFICO FULL-WIDTH POLYMARKET STYLE */}
         <Card className="bg-card border border-border/50 shadow-sm rounded-2xl overflow-hidden mb-12">
           <CardContent className="p-0">
             <div className="p-6 md:p-8 flex flex-col md:flex-row justify-between items-start md:items-end gap-6 border-b border-border/20">
               <div>
                 <div className="flex items-center gap-2 font-bold text-muted-foreground mb-2">
-                  <TrendingUp className="w-4 h-4" /> Profit / Loss
+                  <TrendingUp className="w-4 h-4" /> Crecimiento de Cuenta
                 </div>
                 
                 <div className="flex items-baseline gap-3 flex-wrap">
@@ -440,7 +439,7 @@ export default function ProfilePage() {
                 </div>
 
                 <p className="text-sm font-medium text-muted-foreground mt-2">
-                  {dynamicPnl.value >= 0 ? 'Ganancia' : 'Pérdida'} en {timeframeLabels[timeframe]} • Total: {portfolioStats.totalPortfolioValue.toLocaleString()} pts
+                  Rendimiento en {timeframeLabels[timeframe]} • Total: {portfolioStats.totalPortfolioValue.toLocaleString()} pts
                 </p>
               </div>
 
@@ -462,7 +461,7 @@ export default function ProfilePage() {
 
             <div className="w-full h-[350px] md:h-[450px] p-4 md:p-6 pt-8">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 10 }}>
                   <defs>
                     <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor={themeChartColor} stopOpacity={0.2}/>
@@ -475,38 +474,39 @@ export default function ProfilePage() {
                     type="number" 
                     domain={['dataMin', 'dataMax']} 
                     tickFormatter={xAxisFormatter}
-                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11, fontWeight: 500 }}
+                    tick={{ fill: axisTextColor, fontSize: 12, fontWeight: 500 }}
                     tickLine={false}
-                    axisLine={false}
+                    axisLine={{ stroke: axisLineColor, strokeWidth: 1.5 }}
                     minTickGap={60}
-                    dy={10}
+                    dy={15}
                   />
                   
                   <YAxis 
                     domain={['auto', 'auto']} 
                     tickFormatter={yAxisFormatter}
-                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11, fontWeight: 500 }}
+                    tick={{ fill: axisTextColor, fontSize: 12, fontWeight: 500 }}
                     tickLine={false}
-                    axisLine={false}
-                    width={60}
-                    orientation="right"
+                    axisLine={{ stroke: axisLineColor, strokeWidth: 1.5 }}
+                    width={55}
+                    orientation="left"
+                    dx={-10}
                   />
 
                   <Tooltip 
                     formatter={customTooltipFormatter}
                     labelFormatter={customTooltipLabelFormatter}
                     contentStyle={{ 
-                        backgroundColor: 'hsl(var(--card))', 
+                        backgroundColor: tooltipBgColor, 
                         borderRadius: '12px', 
-                        border: '1px solid hsl(var(--border))', 
+                        border: `1px solid ${axisLineColor}`, 
                         boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
-                        color: 'hsl(var(--foreground))',
+                        color: tooltipTextColor,
                         fontWeight: 'bold',
                         padding: '12px'
                     }}
                     itemStyle={{ color: themeChartColor, fontSize: '16px' }}
-                    labelStyle={{ color: 'hsl(var(--muted-foreground))', marginBottom: '4px', fontSize: '12px' }}
-                    cursor={{ stroke: 'hsl(var(--muted-foreground))', strokeWidth: 1, strokeDasharray: '4 4' }}
+                    labelStyle={{ color: axisTextColor, marginBottom: '4px', fontSize: '12px' }}
+                    cursor={{ stroke: axisTextColor, strokeWidth: 1, strokeDasharray: '4 4' }}
                   />
                   
                   <Area 
@@ -526,7 +526,6 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
 
-        {/* HISTORIAL TABS: ACTIVAS / FINALIZADAS / MOVIMIENTOS */}
         <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
           <History className="w-6 h-6 text-primary" /> Tu Historial
         </h2>
@@ -580,7 +579,6 @@ export default function ProfilePage() {
                                  </div>
                               </div>
                               
-                              {/* BOTÓN DE VENDER - MAGIA PURA */}
                               <div className="w-full md:w-auto mt-2 md:mt-0 pt-4 md:pt-0 border-t md:border-t-0 border-border/50">
                                 <Button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setBetToSell({ id: bet.id, title: market?.title ?? "Mercado", outcomeName: predictionText, direction: direction, cashoutValue: cashoutValue, pnl: pnl, pnlPercentage: pnlPercentage }); }} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black h-11 px-7 w-full md:w-auto shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all rounded-full" ><Coins className="w-4 h-4 mr-2" /> Vender por {cashoutValue.toLocaleString()} pts</Button>
                               </div>
