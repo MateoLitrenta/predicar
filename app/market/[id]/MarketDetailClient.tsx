@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { NavHeader } from "@/components/nav-header";
@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { createClient } from "@/lib/supabase/client";
 import { sellBet } from "@/lib/actions";
-import { Loader2, ArrowLeft, Clock, Coins, X, User as UserIcon, MessageSquare, Reply, ChevronDown, ChevronUp, Trash2, ArrowDownRight, ArrowUpRight, TrendingUp, LineChart as LineChartIcon, Share2, Twitter, MessageCircle, Copy, Check, Lock } from "lucide-react";
+import { Loader2, ArrowLeft, Clock, Coins, X, User as UserIcon, MessageSquare, Reply, ChevronDown, ChevronUp, Trash2, ArrowDownRight, ArrowUpRight, TrendingUp, LineChart as LineChartIcon, Share2, Twitter, MessageCircle, Copy, Check, Lock, CheckCircle2, Trophy } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
@@ -27,6 +27,8 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "rec
 interface MarketDetailClientProps {
   marketId: string;
 }
+
+type ChartTimeframe = '1H' | '6H' | '1D' | '1W' | '1M' | '6M' | '1Y' | 'ALL';
 
 export default function MarketDetailClient({ marketId }: MarketDetailClientProps) {
   const router = useRouter();
@@ -64,10 +66,11 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
   const [commentToDelete, setCommentToDelete] = useState<string | null>(null);
   const [isDeletingComment, setIsDeletingComment] = useState(false);
 
+  const [chartTimeframe, setChartTimeframe] = useState<ChartTimeframe>('ALL');
+
   useEffect(() => {
     setMarketUrl(window.location.href);
 
-    // ACÁ ESTÁ LA MAGIA DEL DEEP LINKING: Leer la URL para auto-seleccionar
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const preselectId = params.get('preselect');
@@ -115,25 +118,39 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
     const { data: oldHistoryData } = await supabase.from("market_history").select("*").eq("market_id", marketId).order("created_at", { ascending: true });
 
     let formattedHistory: any[] = [];
+    
     if (newHistoryData && newHistoryData.length > 0) {
       const historyMap = new Map();
       newHistoryData.forEach(h => {
-        const time = new Date(h.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
-        if (!historyMap.has(time)) historyMap.set(time, { time });
-        historyMap.get(time)[h.option_id] = Number(h.percentage);
+        const d = new Date(h.created_at);
+        d.setSeconds(0, 0); 
+        const ts = d.getTime();
+        
+        if (!historyMap.has(ts)) {
+            historyMap.set(ts, { timestamp: ts });
+        }
+        historyMap.get(ts)[h.option_id] = Number(h.percentage);
       });
-      formattedHistory = Array.from(historyMap.values());
+      formattedHistory = Array.from(historyMap.values()).sort((a, b) => a.timestamp - b.timestamp);
+      
     } else if (oldHistoryData && oldHistoryData.length > 0 && optionsData && optionsData.length === 2) {
       const yesOpt = optionsData.find(o => o.option_name.toLowerCase().includes('s'));
       const noOpt = optionsData.find(o => o.option_name.toLowerCase().includes('n'));
-      formattedHistory = oldHistoryData.map(h => ({
-        time: new Date(h.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }),
-        [yesOpt?.id || 'yes']: h.yes_percentage,
-        [noOpt?.id || 'no']: 100 - h.yes_percentage,
-      }));
+      formattedHistory = oldHistoryData.map(h => {
+        const d = new Date(h.created_at);
+        d.setSeconds(0, 0);
+        return {
+          timestamp: d.getTime(),
+          [yesOpt?.id || 'yes']: h.yes_percentage,
+          [noOpt?.id || 'no']: 100 - h.yes_percentage,
+        };
+      }).sort((a, b) => a.timestamp - b.timestamp);
     }
 
-    if (formattedHistory.length === 1) formattedHistory.push({ ...formattedHistory[0], time: "Ahora" });
+    if (formattedHistory.length > 0 && mData.status !== 'resolved') {
+        formattedHistory.push({ ...formattedHistory[formattedHistory.length - 1], timestamp: Date.now() });
+    }
+
     setHistory(formattedHistory);
 
     const { data: betsData } = await supabase.from("bets").select("*").eq("market_id", marketId).order("created_at", { ascending: false });
@@ -203,7 +220,6 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
     window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
   };
 
-  // MATEMÁTICA BLINDADA: Sumamos los votos reales de las opciones
   const realTotalVotes = options.reduce((acc, opt) => acc + Number(opt.total_votes || 0), 0);
 
   const getOptionPrice = (optionVotes: number) => {
@@ -313,15 +329,98 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
   };
 
   const openUserProfile = (userId: string, username: string) => { 
-    router.push(`/user/${userId}`); 
+    router.push(`/profile/${userId}`); 
   };
   
   const toggleThread = (commentId: string) => { setExpandedThreads(prev => ({ ...prev, [commentId]: !prev[commentId] })); };
 
+  // --- MOTOR DE FILTRADO Y DOWN-SAMPLING (MAGIA DE POLYMARKET) ---
+  const filteredHistory = useMemo(() => {
+    if (!history || history.length === 0) return [];
+
+    const now = Date.now();
+    let startTime = history[0].timestamp; // Default: Todo el historial
+
+    if (chartTimeframe !== 'ALL') {
+      switch (chartTimeframe) {
+        case '1H': startTime = now - 60 * 60 * 1000; break;
+        case '6H': startTime = now - 6 * 60 * 60 * 1000; break;
+        case '1D': startTime = now - 24 * 60 * 60 * 1000; break;
+        case '1W': startTime = now - 7 * 24 * 60 * 60 * 1000; break;
+        case '1M': startTime = now - 30 * 24 * 60 * 60 * 1000; break;
+        case '6M': startTime = now - 180 * 24 * 60 * 60 * 1000; break;
+        case '1Y': startTime = now - 365 * 24 * 60 * 60 * 1000; break;
+      }
+    }
+
+    // 1. Buscamos el precio base justo antes del corte de tiempo
+    let baselineValue = history[0];
+    for (let i = history.length - 1; i >= 0; i--) {
+        if (history[i].timestamp <= startTime) {
+            baselineValue = history[i];
+            break;
+        }
+    }
+
+    const rawPoints = history.filter(h => h.timestamp > startTime);
+    const dataInTimeframe = [{ ...baselineValue, timestamp: startTime }, ...rawPoints];
+
+    // 2. Agrupación de datos para evitar "ruido" visual en rangos grandes
+    const TARGET_POINTS = 100;
+    if (dataInTimeframe.length <= TARGET_POINTS) return dataInTimeframe;
+
+    const result = [];
+    const timeSpan = dataInTimeframe[dataInTimeframe.length - 1].timestamp - dataInTimeframe[0].timestamp;
+    const interval = timeSpan / TARGET_POINTS;
+
+    let currentBucketEnd = dataInTimeframe[0].timestamp + interval;
+    let lastPointInBucket = dataInTimeframe[0];
+
+    for (let i = 1; i < dataInTimeframe.length; i++) {
+        if (dataInTimeframe[i].timestamp > currentBucketEnd) {
+            result.push(lastPointInBucket); // Guardamos el último precio de ese "paquete" de tiempo
+            while(dataInTimeframe[i].timestamp > currentBucketEnd) {
+                currentBucketEnd += interval;
+            }
+        }
+        lastPointInBucket = dataInTimeframe[i];
+    }
+    result.push(dataInTimeframe[dataInTimeframe.length - 1]); // Siempre incluir el precio actual
+
+    return result;
+  }, [history, chartTimeframe]);
+
+  // CONFIGURACIÓN DINÁMICA DEL GROSOR DE LÍNEA
+  const dynamicStrokeWidth = (chartTimeframe === 'ALL' || chartTimeframe === '1Y' || chartTimeframe === '6M') ? 1.5 : 2.5;
+
+  const axisTextColor = isDarkMode ? '#a1a1aa' : '#64748b';
+  const axisLineColor = isDarkMode ? '#334155' : '#e2e8f0';
+  const tooltipBgColor = isDarkMode ? '#0f172a' : '#ffffff';
+  const tooltipTextColor = isDarkMode ? '#f8fafc' : '#0f172a';
+
+  const formatXAxis = (tick: number) => {
+      const date = new Date(tick);
+      if (chartTimeframe === '1H' || chartTimeframe === '6H' || chartTimeframe === '1D') {
+          return date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+      }
+      if (chartTimeframe === '1W' || chartTimeframe === '1M') {
+          return date.toLocaleDateString('es-AR', { day: '2-digit', month: 'short' });
+      }
+      return date.toLocaleDateString('es-AR', { month: 'short', year: '2-digit' });
+  };
+
+  const customTooltipLabelFormatter = (label: number) => {
+      const date = new Date(label);
+      return date.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
+
   if (isLoading) return <div className="min-h-screen bg-background flex justify-center items-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   if (!market) return null;
 
-  const isMarketClosed = market.status === 'resolved' || (market.end_date && new Date(market.end_date) <= new Date());
+  const isMarketResolved = market.status === 'resolved';
+  const isMarketClosed = isMarketResolved || (market.end_date && new Date(market.end_date) <= new Date());
+  
+  const winningOption = isMarketResolved ? options.find(o => o.id === market.winning_outcome) : null;
 
   const topLevelComments = comments.filter(c => !c.parent_id).reverse();
 
@@ -478,11 +577,17 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
               <div>
                 <div className="flex flex-wrap gap-2 mb-3 items-center">
                    <Badge variant="secondary" className="capitalize">{market.category}</Badge>
-                   {isMarketClosed && (
+                   
+                   {isMarketResolved ? (
+                     <Badge variant="default" className="bg-primary/20 text-primary hover:bg-primary/30 border-primary/30 gap-1.5 font-bold">
+                       <CheckCircle2 className="w-3 h-3" /> Resuelto
+                     </Badge>
+                   ) : isMarketClosed ? (
                      <Badge variant="destructive" className="bg-red-500/10 text-red-500 hover:bg-red-500/20 border-red-500/30 gap-1.5 font-bold">
                        <Lock className="w-3 h-3" /> Cerrado
                      </Badge>
-                   )}
+                   ) : null}
+
                    <Button variant="outline" size="sm" className="h-6 px-3 text-[10px] uppercase font-bold rounded-full flex items-center gap-1.5 border-border/50 hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setIsShareModalOpen(true)}>
                      <Share2 className="w-3 h-3" /> Compartir
                    </Button>
@@ -490,9 +595,9 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
                 <h1 className="text-2xl sm:text-3xl font-bold text-foreground leading-tight mb-2">{market.title}</h1>
                 <div className="flex items-center gap-4 text-sm text-muted-foreground mt-3">
                   <div className="flex items-center gap-1.5"><Coins className="w-4 h-4" />{realTotalVotes.toLocaleString()} pts Vol.</div>
-                  <div className={cn("flex items-center gap-1.5", isMarketClosed ? "text-red-500 font-medium" : "")}>
+                  <div className={cn("flex items-center gap-1.5", isMarketResolved ? "text-primary font-medium" : isMarketClosed ? "text-red-500 font-medium" : "")}>
                     <Clock className="w-4 h-4" />
-                    {isMarketClosed ? `Cerró el ${new Date(market.end_date).toLocaleDateString()}` : `Cierra: ${new Date(market.end_date).toLocaleDateString()}`}
+                    {isMarketResolved ? "Mercado finalizado" : isMarketClosed ? `Cerró el ${new Date(market.end_date).toLocaleDateString()}` : `Cierra: ${new Date(market.end_date).toLocaleDateString()}`}
                   </div>
                 </div>
               </div>
@@ -500,23 +605,83 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
 
             {market.description && <div className="p-5 rounded-xl bg-muted/30 border border-border/50 text-muted-foreground leading-relaxed">{market.description}</div>}
 
+            {/* GRÁFICO ESTILO POLYMARKET */}
             <div className="p-6 rounded-xl border border-border/50 bg-card shadow-sm">
-              <h3 className="font-semibold mb-2 flex justify-between items-center">
-                <span className="flex items-center gap-2"><LineChartIcon className="w-5 h-5 text-primary" /> Tendencia del Mercado</span>
-              </h3>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                <h3 className="font-semibold flex items-center gap-2">
+                  <LineChartIcon className="w-5 h-5 text-primary" /> Tendencia del Mercado
+                </h3>
+                <div className="flex bg-muted/50 p-1 rounded-xl border border-border/30 w-full sm:w-auto overflow-x-auto">
+                  {(['1H', '6H', '1D', '1W', '1M', '6M', '1Y', 'ALL'] as ChartTimeframe[]).map((tf) => (
+                    <button 
+                      key={tf} 
+                      onClick={() => setChartTimeframe(tf)} 
+                      className={cn(
+                        "px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap flex-1 sm:flex-none", 
+                        chartTimeframe === tf ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {tf}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-              {history.length > 0 && (
-                <div className="h-[250px] w-full mt-4 mb-2">
+              {filteredHistory.length > 0 ? (
+                <div className="h-[300px] w-full mt-4 mb-2">
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={history}>
-                      <XAxis dataKey="time" stroke="#888888" fontSize={10} tickLine={false} axisLine={false} minTickGap={30} />
-                      <YAxis stroke="#888888" fontSize={10} tickLine={false} axisLine={false} domain={[0, 100]} tickFormatter={(val) => `${val}%`} width={40} />
-                      <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '8px', border: '1px solid hsl(var(--border))' }} />
+                    <LineChart data={filteredHistory} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <XAxis 
+                        dataKey="timestamp" 
+                        type="number" 
+                        domain={['dataMin', 'dataMax']} 
+                        tickFormatter={formatXAxis}
+                        stroke={axisTextColor} 
+                        fontSize={11} 
+                        tickLine={false} 
+                        axisLine={false} 
+                        minTickGap={60} 
+                        dy={10}
+                      />
+                      <YAxis 
+                        stroke={axisTextColor} 
+                        fontSize={11} 
+                        tickLine={false} 
+                        axisLine={false} 
+                        domain={[0, 100]} 
+                        tickFormatter={(val) => `${val}%`} 
+                        width={60} 
+                        orientation="right"
+                      />
+                      <Tooltip 
+                        labelFormatter={customTooltipLabelFormatter}
+                        contentStyle={{ backgroundColor: tooltipBgColor, borderRadius: '12px', border: `1px solid ${axisLineColor}`, boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', color: tooltipTextColor, fontWeight: 'bold', padding: '12px' }}
+                        itemStyle={{ fontSize: '14px', fontWeight: 'bold' }}
+                        labelStyle={{ color: axisTextColor, marginBottom: '4px', fontSize: '11px', textTransform: 'uppercase' }}
+                        cursor={{ stroke: axisTextColor, strokeWidth: 1, strokeDasharray: '4 4' }}
+                      />
                       {options.map((opt) => (
-                        <Line key={opt.id} type="monotone" dataKey={opt.id} stroke={opt.color} strokeWidth={3} dot={false} name={opt.option_name} />
+                        <Line 
+                          key={opt.id} 
+                          type="stepAfter" 
+                          connectNulls={true}
+                          dataKey={opt.id} 
+                          stroke={opt.color} 
+                          strokeWidth={dynamicStrokeWidth} 
+                          dot={false} 
+                          activeDot={{ r: 5, strokeWidth: 0 }}
+                          name={opt.option_name} 
+                          isAnimationActive={true}
+                          animationDuration={300}
+                          animationEasing="ease-in-out"
+                        />
                       ))}
                     </LineChart>
                   </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="h-[300px] w-full mt-4 mb-2 flex items-center justify-center border-2 border-dashed border-border/50 rounded-xl bg-muted/10">
+                  <p className="text-sm font-medium text-muted-foreground">No hay actividad en este período.</p>
                 </div>
               )}
             </div>
@@ -560,15 +725,24 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
                     const isSelectedYes = selectedOptionId === opt.id && selectedDirection === 'yes';
                     const isSelectedNo = selectedOptionId === opt.id && selectedDirection === 'no';
 
+                    const isWinner = isMarketResolved && market.winning_outcome === opt.id;
+
                     return (
-                      <div key={opt.id} className={cn("flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-4 rounded-xl border border-border/50 bg-card transition-colors gap-4", isMarketClosed && "opacity-70")}>
+                      <div key={opt.id} className={cn(
+                        "flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-4 rounded-xl border transition-colors gap-4", 
+                        isWinner ? "border-primary/50 bg-primary/5 shadow-[0_0_15px_rgba(var(--primary),0.1)]" : "border-border/50 bg-card",
+                        (isMarketClosed && !isWinner) && "opacity-60"
+                      )}>
                         <div className="flex items-center gap-3 flex-1 min-w-0">
                           <div className="w-4 h-4 rounded-full shadow-inner shrink-0" style={{ backgroundColor: opt.color }} />
-                          <span className="font-bold text-base sm:text-lg text-foreground truncate">{opt.option_name}</span>
+                          <span className={cn("font-bold text-base sm:text-lg truncate", isWinner ? "text-primary" : "text-foreground")}>
+                            {opt.option_name}
+                            {isWinner && <Badge className="ml-2 bg-primary text-primary-foreground text-[10px] uppercase">Ganador</Badge>}
+                          </span>
                         </div>
                         
                         <div className="flex justify-start sm:justify-center w-16 sm:w-20 shrink-0 pl-7 sm:pl-0">
-                          <span className="font-black text-xl text-foreground">{yesCents}%</span>
+                          <span className={cn("font-black text-xl", isWinner ? "text-primary" : "text-foreground")}>{yesCents}%</span>
                         </div>
 
                         <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
@@ -603,167 +777,179 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
           <div className="lg:col-span-1 lg:sticky lg:top-24 w-full order-2">
             <div className="rounded-2xl border border-border/50 bg-card shadow-xl overflow-hidden p-2 sm:p-3">
               
-              <Tabs value={tradeTab} onValueChange={setTradeTab} className="w-full">
-                <TabsList className="grid w-full grid-cols-2 h-12 p-1 bg-muted/50 rounded-xl mb-4">
-                  <TabsTrigger value="buy" className="rounded-lg text-sm sm:text-base font-bold data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm transition-all text-muted-foreground">
-                    Comprar
-                  </TabsTrigger>
-                  <TabsTrigger value="sell" className="rounded-lg text-sm sm:text-base font-bold data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm transition-all text-muted-foreground">
-                    Vender
-                  </TabsTrigger>
-                </TabsList>
+              {isMarketResolved ? (
+                <div className="mb-2 p-6 text-center bg-primary/10 border border-primary/20 rounded-xl">
+                  <Trophy className="w-12 h-12 text-primary mx-auto mb-3 drop-shadow-md" />
+                  <h3 className="text-xl font-black text-primary mb-1">MERCADO RESUELTO</h3>
+                  <p className="text-sm font-medium text-muted-foreground mb-4">La opción ganadora fue:</p>
+                  <Badge className="text-lg px-4 py-1.5 font-black bg-background text-foreground border-2 border-primary/50 shadow-sm">
+                    {winningOption?.option_name || 'Desconocido'}
+                  </Badge>
+                  <p className="text-xs text-muted-foreground mt-4">Los puntos ya fueron distribuidos a las carteras de los ganadores.</p>
+                </div>
+              ) : (
+                <Tabs value={tradeTab} onValueChange={setTradeTab} className="w-full">
+                  <TabsList className="grid w-full grid-cols-2 h-12 p-1 bg-muted/50 rounded-xl mb-4">
+                    <TabsTrigger value="buy" className="rounded-lg text-sm sm:text-base font-bold data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm transition-all text-muted-foreground">
+                      Comprar
+                    </TabsTrigger>
+                    <TabsTrigger value="sell" className="rounded-lg text-sm sm:text-base font-bold data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm transition-all text-muted-foreground">
+                      Vender
+                    </TabsTrigger>
+                  </TabsList>
 
-                {isMarketClosed && (
-                  <div className="mb-4 mx-2 p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-2 text-red-500">
-                    <Lock className="w-4 h-4 mt-0.5 shrink-0" />
-                    <p className="text-xs font-medium leading-relaxed">
-                      Este mercado ya cerró y las operaciones están bloqueadas. Los puntos de las apuestas ganadoras se repartirán cuando el administrador confirme el resultado final.
-                    </p>
-                  </div>
-                )}
+                  {isMarketClosed && !isMarketResolved && (
+                    <div className="mb-4 mx-2 p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-2 text-red-500">
+                      <Lock className="w-4 h-4 mt-0.5 shrink-0" />
+                      <p className="text-xs font-medium leading-relaxed">
+                        Este mercado ya cerró y las operaciones están bloqueadas. Los puntos de las apuestas ganadoras se repartirán cuando el administrador confirme el resultado final.
+                      </p>
+                    </div>
+                  )}
 
-                <TabsContent value="buy" className="p-2 sm:p-3 mt-0">
-                  <div className="flex flex-col gap-4">
-                    {!selectedOptionId ? (
-                      <div className="p-6 text-center border-2 border-dashed border-border/50 rounded-xl bg-muted/10">
-                        <TrendingUp className="w-8 h-8 mx-auto mb-2 text-muted-foreground opacity-50" />
-                        <p className="text-sm font-medium text-muted-foreground">Seleccioná tu predicción para operar.</p>
-                      </div>
-                    ) : (
-                      <>
-                        <div className={cn("p-4 rounded-xl border", !isRedTheme ? 'border-green-500/40 bg-green-500/10' : 'border-red-500/40 bg-red-500/10')}>
-                          <p className={cn("text-xs font-bold uppercase mb-1 opacity-90", !isRedTheme ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400')}>Estás comprando</p>
-                          <div className="flex justify-between items-center">
-                            <span className={cn("font-black text-lg sm:text-xl", !isRedTheme ? 'text-green-700 dark:text-green-500' : 'text-red-700 dark:text-red-500')}>
-                              {isBinaryYesNo ? `Comprar ${selectedOptName}` : `Comprar ${selectedDirection === 'yes' ? 'Sí' : 'No'}`}
-                            </span>
-                            <span className={cn("font-bold text-xl", !isRedTheme ? 'text-green-700 dark:text-green-500' : 'text-red-700 dark:text-red-500')}>
-                              {selectedDirection === 'yes' 
-                                ? Math.round(getOptionPrice(options.find(o => o.id === selectedOptionId)?.total_votes) * 100) 
-                                : 100 - Math.round(getOptionPrice(options.find(o => o.id === selectedOptionId)?.total_votes) * 100)}¢
-                            </span>
-                          </div>
-                          {!isBinaryYesNo && <p className="text-sm font-medium mt-1 truncate text-foreground/80">{selectedOptName}</p>}
+                  <TabsContent value="buy" className="p-2 sm:p-3 mt-0">
+                    <div className="flex flex-col gap-4">
+                      {!selectedOptionId ? (
+                        <div className="p-6 text-center border-2 border-dashed border-border/50 rounded-xl bg-muted/10">
+                          <TrendingUp className="w-8 h-8 mx-auto mb-2 text-muted-foreground opacity-50" />
+                          <p className="text-sm font-medium text-muted-foreground">Seleccioná tu predicción para operar.</p>
                         </div>
-
-                        <div>
-                          <Label className="text-muted-foreground mb-1.5 block">Monto a invertir</Label>
-                          <div className="relative">
-                            <Input type="number" placeholder="0" value={betAmount} onChange={(e) => setBetAmount(e.target.value)} disabled={isMarketClosed} className="pl-4 h-14 text-xl font-bold bg-muted/20 border-border/50 focus-visible:ring-1 focus-visible:ring-primary/50 disabled:opacity-50" />
-                            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground font-bold">pts</span>
-                          </div>
-                        </div>
-
-                        {betAmount && !isNaN(Number(betAmount)) && Number(betAmount) > 0 && (
-                          <div className="p-4 rounded-xl bg-muted/30 border border-border/50 space-y-2">
-                            <div className="flex justify-between text-sm">
-                              <span className="text-muted-foreground">Precio por acción</span>
-                              <span className="font-bold">
+                      ) : (
+                        <>
+                          <div className={cn("p-4 rounded-xl border", !isRedTheme ? 'border-green-500/40 bg-green-500/10' : 'border-red-500/40 bg-red-500/10')}>
+                            <p className={cn("text-xs font-bold uppercase mb-1 opacity-90", !isRedTheme ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400')}>Estás comprando</p>
+                            <div className="flex justify-between items-center">
+                              <span className={cn("font-black text-lg sm:text-xl", !isRedTheme ? 'text-green-700 dark:text-green-500' : 'text-red-700 dark:text-red-500')}>
+                                {isBinaryYesNo ? `Comprar ${selectedOptName}` : `Comprar ${selectedDirection === 'yes' ? 'Sí' : 'No'}`}
+                              </span>
+                              <span className={cn("font-bold text-xl", !isRedTheme ? 'text-green-700 dark:text-green-500' : 'text-red-700 dark:text-red-500')}>
                                 {selectedDirection === 'yes' 
                                   ? Math.round(getOptionPrice(options.find(o => o.id === selectedOptionId)?.total_votes) * 100) 
                                   : 100 - Math.round(getOptionPrice(options.find(o => o.id === selectedOptionId)?.total_votes) * 100)}¢
                               </span>
                             </div>
-                            <div className="flex justify-between text-sm">
-                              <span className="text-muted-foreground">Acciones estimadas</span>
-                              <span className={cn("font-bold", !isRedTheme ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500')}>
-                                ~{Math.floor(Number(betAmount) / (selectedDirection === 'yes' ? getOptionPrice(options.find(o => o.id === selectedOptionId)?.total_votes) : (1 - getOptionPrice(options.find(o => o.id === selectedOptionId)?.total_votes)))).toLocaleString()}
-                              </span>
+                            {!isBinaryYesNo && <p className="text-sm font-medium mt-1 truncate text-foreground/80">{selectedOptName}</p>}
+                          </div>
+
+                          <div>
+                            <Label className="text-muted-foreground mb-1.5 block">Monto a invertir</Label>
+                            <div className="relative">
+                              <Input type="number" placeholder="0" value={betAmount} onChange={(e) => setBetAmount(e.target.value)} disabled={isMarketClosed} className="pl-4 h-14 text-xl font-bold bg-muted/20 border-border/50 focus-visible:ring-1 focus-visible:ring-primary/50 disabled:opacity-50" />
+                              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground font-bold">pts</span>
                             </div>
                           </div>
-                        )}
 
-                        {user && (
-                          <div className="flex justify-between items-center text-xs text-muted-foreground px-1">
-                            <span>Balance disponible:</span>
-                            <span className="font-bold text-foreground">{(profile?.points || 0).toLocaleString()} pts</span>
-                          </div>
-                        )}
-                        
-                        <Button 
-                          size="lg" 
-                          className={cn("w-full h-14 text-lg font-bold text-white shadow-lg mt-2 transition-all", isMarketClosed ? "bg-muted text-muted-foreground shadow-none" : (!isRedTheme ? 'bg-green-600 hover:bg-green-700 shadow-green-500/20 hover:scale-[1.02] active:scale-[0.98]' : 'bg-red-600 hover:bg-red-700 shadow-red-500/20 hover:scale-[1.02] active:scale-[0.98]'))} 
-                          disabled={!betAmount || isPlacingBet || isMarketClosed} 
-                          onClick={handlePlaceBet}
-                        >
-                          {isMarketClosed ? <><Lock className="w-5 h-5 mr-2" /> Mercado Cerrado</> : isPlacingBet ? <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Procesando...</> : !user ? "Ingresar para Operar" : `Confirmar Orden`}
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                </TabsContent>
+                          {betAmount && !isNaN(Number(betAmount)) && Number(betAmount) > 0 && (
+                            <div className="p-4 rounded-xl bg-muted/30 border border-border/50 space-y-2">
+                              <div className="flex justify-between text-sm">
+                                <span className="text-muted-foreground">Precio por acción</span>
+                                <span className="font-bold">
+                                  {selectedDirection === 'yes' 
+                                    ? Math.round(getOptionPrice(options.find(o => o.id === selectedOptionId)?.total_votes) * 100) 
+                                    : 100 - Math.round(getOptionPrice(options.find(o => o.id === selectedOptionId)?.total_votes) * 100)}¢
+                                </span>
+                              </div>
+                              <div className="flex justify-between text-sm">
+                                <span className="text-muted-foreground">Acciones estimadas</span>
+                                <span className={cn("font-bold", !isRedTheme ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500')}>
+                                  ~{Math.floor(Number(betAmount) / (selectedDirection === 'yes' ? getOptionPrice(options.find(o => o.id === selectedOptionId)?.total_votes) : (1 - getOptionPrice(options.find(o => o.id === selectedOptionId)?.total_votes)))).toLocaleString()}
+                                </span>
+                              </div>
+                            </div>
+                          )}
 
-                <TabsContent value="sell" className="p-2 sm:p-3 mt-0">
-                  {!user ? (
-                    <div className="text-center py-8">
-                      <p className="text-muted-foreground text-sm mb-4">Iniciá sesión para ver tu portfolio.</p>
-                      <Button onClick={() => setIsAuthModalOpen(true)}>Ingresar</Button>
+                          {user && (
+                            <div className="flex justify-between items-center text-xs text-muted-foreground px-1">
+                              <span>Balance disponible:</span>
+                              <span className="font-bold text-foreground">{(profile?.points || 0).toLocaleString()} pts</span>
+                            </div>
+                          )}
+                          
+                          <Button 
+                            size="lg" 
+                            className={cn("w-full h-14 text-lg font-bold text-white shadow-lg mt-2 transition-all", isMarketClosed ? "bg-muted text-muted-foreground shadow-none" : (!isRedTheme ? 'bg-green-600 hover:bg-green-700 shadow-green-500/20 hover:scale-[1.02] active:scale-[0.98]' : 'bg-red-600 hover:bg-red-700 shadow-red-500/20 hover:scale-[1.02] active:scale-[0.98]'))} 
+                            disabled={!betAmount || isPlacingBet || isMarketClosed} 
+                            onClick={handlePlaceBet}
+                          >
+                            {isMarketClosed ? <><Lock className="w-5 h-5 mr-2" /> Mercado Cerrado</> : isPlacingBet ? <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Procesando...</> : !user ? "Ingresar para Operar" : `Confirmar Orden`}
+                          </Button>
+                        </>
+                      )}
                     </div>
-                  ) : userBets.length === 0 ? (
-                    <div className="p-6 text-center border-2 border-dashed border-border/50 rounded-xl bg-muted/10">
-                      <Coins className="w-8 h-8 mx-auto mb-2 text-muted-foreground opacity-50" />
-                      <p className="text-sm font-medium text-muted-foreground">No tenés posiciones activas en este mercado.</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-4 max-h-[400px] overflow-y-auto pr-1">
-                      {userBets.map(bet => {
-                        const opt = options.find(o => o.id === bet.outcome);
-                        
-                        const cashoutVal = opt ? calculateRealCashout(bet, opt) : Math.round(bet.amount * 0.95);
-                        const pnl = cashoutVal - bet.amount;
-                        const pnlPct = (pnl / bet.amount) * 100;
+                  </TabsContent>
 
-                        return (
-                          <div key={bet.id} className={cn("p-4 rounded-xl border border-border/50 bg-muted/10 space-y-3", isMarketClosed && "opacity-75")}>
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <p className="text-[10px] uppercase font-bold text-muted-foreground">Tu posición</p>
-                                <p className="font-bold text-foreground">
-                                  {isBinaryYesNo ? (
-                                    <span className={cn("mr-1", opt?.option_name.toLowerCase() === 'no' ? "text-red-600 dark:text-red-500" : "text-green-600 dark:text-green-500")}>
-                                      {opt?.option_name}
-                                    </span>
-                                  ) : (
-                                    <>
-                                      <span className={cn("mr-1", bet.direction === 'no' ? "text-red-600 dark:text-red-500" : "text-green-600 dark:text-green-500")}>
-                                        {bet.direction === 'no' ? 'No' : 'Sí'}
+                  <TabsContent value="sell" className="p-2 sm:p-3 mt-0">
+                    {!user ? (
+                      <div className="text-center py-8">
+                        <p className="text-muted-foreground text-sm mb-4">Iniciá sesión para ver tu portfolio.</p>
+                        <Button onClick={() => setIsAuthModalOpen(true)}>Ingresar</Button>
+                      </div>
+                    ) : userBets.length === 0 ? (
+                      <div className="p-6 text-center border-2 border-dashed border-border/50 rounded-xl bg-muted/10">
+                        <Coins className="w-8 h-8 mx-auto mb-2 text-muted-foreground opacity-50" />
+                        <p className="text-sm font-medium text-muted-foreground">No tenés posiciones activas en este mercado.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4 max-h-[400px] overflow-y-auto pr-1">
+                        {userBets.map(bet => {
+                          const opt = options.find(o => o.id === bet.outcome);
+                          
+                          const cashoutVal = opt ? calculateRealCashout(bet, opt) : Math.round(bet.amount * 0.95);
+                          const pnl = cashoutVal - bet.amount;
+                          const pnlPct = (pnl / bet.amount) * 100;
+
+                          return (
+                            <div key={bet.id} className={cn("p-4 rounded-xl border border-border/50 bg-muted/10 space-y-3", isMarketClosed && "opacity-75")}>
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <p className="text-[10px] uppercase font-bold text-muted-foreground">Tu posición</p>
+                                  <p className="font-bold text-foreground">
+                                    {isBinaryYesNo ? (
+                                      <span className={cn("mr-1", opt?.option_name.toLowerCase() === 'no' ? "text-red-600 dark:text-red-500" : "text-green-600 dark:text-green-500")}>
+                                        {opt?.option_name}
                                       </span>
-                                      a {opt?.option_name || "Opción"}
-                                    </>
-                                  )}
-                                </p>
+                                    ) : (
+                                      <>
+                                        <span className={cn("mr-1", bet.direction === 'no' ? "text-red-600 dark:text-red-500" : "text-green-600 dark:text-green-500")}>
+                                          {bet.direction === 'no' ? 'No' : 'Sí'}
+                                        </span>
+                                        a {opt?.option_name || "Opción"}
+                                      </>
+                                    )}
+                                  </p>
+                                </div>
+                                <Badge variant="outline" className={cn("font-bold border", pnl >= 0 ? "bg-green-500/10 text-green-600 dark:text-green-500 border-green-500/30" : "bg-red-500/10 text-red-600 dark:text-red-500 border-red-500/30")}>
+                                  {pnl >= 0 ? "+" : ""}{pnlPct.toFixed(1)}%
+                                </Badge>
                               </div>
-                              <Badge variant="outline" className={cn("font-bold border", pnl >= 0 ? "bg-green-500/10 text-green-600 dark:text-green-500 border-green-500/30" : "bg-red-500/10 text-red-600 dark:text-red-500 border-red-500/30")}>
-                                {pnl >= 0 ? "+" : ""}{pnlPct.toFixed(1)}%
-                              </Badge>
-                            </div>
-                            
-                            <div className="grid grid-cols-2 gap-2 text-sm bg-background p-2 rounded-lg border border-border/50">
-                              <div>
-                                <p className="text-[10px] text-muted-foreground">Inversión</p>
-                                <p className="font-semibold">{bet.amount} pts</p>
+                              
+                              <div className="grid grid-cols-2 gap-2 text-sm bg-background p-2 rounded-lg border border-border/50">
+                                <div>
+                                  <p className="text-[10px] text-muted-foreground">Inversión</p>
+                                  <p className="font-semibold">{bet.amount} pts</p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-[10px] text-muted-foreground">Valor Actual</p>
+                                  <p className="font-bold text-primary">{cashoutVal} pts</p>
+                                </div>
                               </div>
-                              <div className="text-right">
-                                <p className="text-[10px] text-muted-foreground">Valor Actual</p>
-                                <p className="font-bold text-primary">{cashoutVal} pts</p>
-                              </div>
-                            </div>
 
-                            <Button 
-                              size="sm" 
-                              className="w-full h-10 font-bold bg-secondary hover:bg-secondary/80 text-secondary-foreground" 
-                              onClick={() => handleSellBet(bet.id)} 
-                              disabled={sellingBetId === bet.id || isMarketClosed}
-                            >
-                              {isMarketClosed ? <><Lock className="w-4 h-4 mr-2" /> Bloqueado</> : sellingBetId === bet.id ? <Loader2 className="w-4 h-4 animate-spin" /> : `Liquidar por ${cashoutVal} pts`}
-                            </Button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </TabsContent>
-              </Tabs>
+                              <Button 
+                                size="sm" 
+                                className="w-full h-10 font-bold bg-secondary hover:bg-secondary/80 text-secondary-foreground" 
+                                onClick={() => handleSellBet(bet.id)} 
+                                disabled={sellingBetId === bet.id || isMarketClosed}
+                              >
+                                {isMarketClosed ? <><Lock className="w-4 h-4 mr-2" /> Bloqueado</> : sellingBetId === bet.id ? <Loader2 className="w-4 h-4 animate-spin" /> : `Liquidar por ${cashoutVal} pts`}
+                              </Button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </TabsContent>
+                </Tabs>
+              )}
             </div>
           </div>
 
