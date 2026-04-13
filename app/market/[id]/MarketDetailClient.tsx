@@ -339,7 +339,7 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
     if (!history || history.length === 0) return [];
 
     const now = Date.now();
-    let startTime = history[0].timestamp; // Default: Todo el historial
+    let startTime = history[0].timestamp; 
 
     if (chartTimeframe !== 'ALL') {
       switch (chartTimeframe) {
@@ -353,7 +353,6 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
       }
     }
 
-    // 1. Buscamos el precio base justo antes del corte de tiempo
     let baselineValue = history[0];
     for (let i = history.length - 1; i >= 0; i--) {
         if (history[i].timestamp <= startTime) {
@@ -365,7 +364,6 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
     const rawPoints = history.filter(h => h.timestamp > startTime);
     const dataInTimeframe = [{ ...baselineValue, timestamp: startTime }, ...rawPoints];
 
-    // 2. Agrupación de datos para evitar "ruido" visual en rangos grandes
     const TARGET_POINTS = 100;
     if (dataInTimeframe.length <= TARGET_POINTS) return dataInTimeframe;
 
@@ -378,14 +376,14 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
 
     for (let i = 1; i < dataInTimeframe.length; i++) {
         if (dataInTimeframe[i].timestamp > currentBucketEnd) {
-            result.push(lastPointInBucket); // Guardamos el último precio de ese "paquete" de tiempo
+            result.push(lastPointInBucket); 
             while(dataInTimeframe[i].timestamp > currentBucketEnd) {
                 currentBucketEnd += interval;
             }
         }
         lastPointInBucket = dataInTimeframe[i];
     }
-    result.push(dataInTimeframe[dataInTimeframe.length - 1]); // Siempre incluir el precio actual
+    result.push(dataInTimeframe[dataInTimeframe.length - 1]); 
 
     return result;
   }, [history, chartTimeframe]);
@@ -660,20 +658,24 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
                         labelStyle={{ color: axisTextColor, marginBottom: '4px', fontSize: '11px', textTransform: 'uppercase' }}
                         cursor={{ stroke: axisTextColor, strokeWidth: 1, strokeDasharray: '4 4' }}
                       />
+                      {/* ACÁ APLICAMOS EL ESTILO MONOTONE Y LOS EFECTOS VISUALES */}
                       {options.map((opt) => (
                         <Line 
                           key={opt.id} 
-                          type="stepAfter" 
+                          type="monotone" 
                           connectNulls={true}
                           dataKey={opt.id} 
                           stroke={opt.color} 
                           strokeWidth={dynamicStrokeWidth} 
+                          strokeOpacity={0.9} 
+                          strokeLinecap="round" 
+                          strokeLinejoin="round" 
                           dot={false} 
-                          activeDot={{ r: 5, strokeWidth: 0 }}
+                          activeDot={{ r: 6, strokeWidth: 0, fill: opt.color }}
                           name={opt.option_name} 
                           isAnimationActive={true}
-                          animationDuration={300}
-                          animationEasing="ease-in-out"
+                          animationDuration={500}
+                          animationEasing="ease-out"
                         />
                       ))}
                     </LineChart>
