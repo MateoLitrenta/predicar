@@ -331,10 +331,9 @@ export default function ProfilePage() {
   const isProfit = dynamicPnl.value >= 0;
   const themeChartColor = isProfit ? (isDarkMode ? "#00FF00" : "#16a34a") : (isDarkMode ? "#FF0000" : "#dc2626");
   
-  // COLORES DINÁMICOS PARA EL GRÁFICO
-  const axisTextColor = isDarkMode ? '#a1a1aa' : '#64748b'; // Gris claro en dark, gris oscuro en light
-  const axisLineColor = isDarkMode ? '#334155' : '#e2e8f0'; // Borde sutil
-  const tooltipBgColor = isDarkMode ? '#0f172a' : '#ffffff'; // Fondo oscuro o blanco
+  const axisTextColor = isDarkMode ? '#a1a1aa' : '#64748b'; 
+  const axisLineColor = isDarkMode ? '#334155' : '#e2e8f0'; 
+  const tooltipBgColor = isDarkMode ? '#0f172a' : '#ffffff'; 
   const tooltipTextColor = isDarkMode ? '#f8fafc' : '#0f172a';
 
   if (isChecking) return <div className="min-h-screen bg-background flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
@@ -354,6 +353,7 @@ export default function ProfilePage() {
           <Badge className="bg-primary/10 text-primary border-primary/20 font-medium">Área Personal</Badge>
         </div>
 
+        {/* PERFIL HEADER */}
         <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 mb-10">
             <Avatar className="w-24 h-24 sm:w-28 sm:h-28 border-4 border-background bg-primary/10 shadow-lg shrink-0">
                 {profile.avatar_url ? <AvatarImage src={profile.avatar_url} className="object-cover" /> : <AvatarFallback><UserIcon className="w-12 h-12 text-primary opacity-50" /></AvatarFallback>}
@@ -377,6 +377,7 @@ export default function ProfilePage() {
             </div>
         </div>
 
+        {/* MÉTRICAS SUPERIORES */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-5 mb-12">
             <Card className="bg-primary/5 border border-primary/20 rounded-2xl p-6 flex flex-col items-center text-center shadow-sm">
                 <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-4"><Wallet className="w-5 h-5" /></div>
@@ -414,6 +415,7 @@ export default function ProfilePage() {
             </Card>
         </div>
 
+        {/* GRÁFICO PRINCIPAL */}
         <Card className="bg-card border border-border/50 shadow-sm rounded-2xl overflow-hidden mb-12">
           <CardContent className="p-0">
             <div className="p-6 md:p-8 flex flex-col md:flex-row justify-between items-start md:items-end gap-6 border-b border-border/20">
@@ -526,6 +528,7 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
 
+        {/* SECCIÓN DE HISTORIAL Y TABS */}
         <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
           <History className="w-6 h-6 text-primary" /> Tu Historial
         </h2>
@@ -622,43 +625,67 @@ export default function ProfilePage() {
                 )}
               </TabsContent>
 
-              <TabsContent value="bank" className="space-y-3">
+              {/* TABLA FINANCIERA DE MOVIMIENTOS (LEDGER) */}
+              <TabsContent value="bank" className="space-y-4 pt-2">
                 {isLoadingTransactions ? (
                   <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
                 ) : processedTransactions.length === 0 ? (
-                  <div className="text-center py-12 border-2 border-dashed border-border/50 rounded-xl bg-muted/10"><Landmark className="w-12 h-12 text-muted-foreground mx-auto mb-3 opacity-50" /><h3 className="font-semibold text-foreground mb-1 text-lg">No hay movimientos</h3></div>
+                  <div className="text-center py-12 border-2 border-dashed border-border/50 rounded-xl bg-muted/10">
+                    <Landmark className="w-12 h-12 text-muted-foreground mx-auto mb-3 opacity-50" />
+                    <h3 className="font-semibold text-foreground mb-1 text-lg">No hay movimientos</h3>
+                  </div>
                 ) : (
-                  <div className="space-y-3">
-                    {processedTransactions.map((tx) => {
-                      const isPositive = tx.amount > 0;
-                      const isExpanded = expandedTx === tx.id;
-                      return (
-                        <div key={tx.id} onClick={() => setExpandedTx(isExpanded ? null : tx.id)} className="flex flex-col p-4 rounded-xl border border-border/50 bg-muted/10 hover:bg-muted/20 transition-all cursor-pointer group">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                              <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isPositive ? 'bg-green-500/20 text-green-600 dark:text-[#00FF00]' : 'bg-red-500/20 text-red-600 dark:text-[#FF0000]'}`}>
-                                {isPositive ? <TrendingUp className="w-5 h-5" /> : <TrendingDown className="w-5 h-5" />}
-                              </div>
-                              <div>
-                                <p className="text-base font-semibold text-foreground">{tx.description}</p>
-                                <p className="text-xs text-muted-foreground uppercase font-medium mt-0.5 flex items-center gap-1">{new Date(tx.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</p>
-                              </div>
+                  <div className="rounded-xl border border-border/50 bg-card overflow-hidden shadow-sm">
+                    {/* Encabezado de la tabla (solo visible en md en adelante) */}
+                    <div className="hidden md:grid grid-cols-12 gap-4 bg-muted/40 p-4 border-b border-border/50 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                      <div className="col-span-2">Fecha</div>
+                      <div className="col-span-5">Descripción</div>
+                      <div className="col-span-2 text-right">Monto</div>
+                      <div className="col-span-3 text-right pr-2">Saldo Resultante</div>
+                    </div>
+                    
+                    {/* Filas de la tabla */}
+                    <div className="divide-y divide-border/30 max-h-[600px] overflow-y-auto">
+                      {processedTransactions.map((tx) => {
+                        const isPositive = tx.amount > 0;
+                        const formattedDate = new Date(tx.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' });
+                        const formattedTime = new Date(tx.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+
+                        return (
+                          <div key={tx.id} className="group flex flex-col md:grid md:grid-cols-12 gap-2 md:gap-4 p-4 hover:bg-muted/10 transition-colors items-start md:items-center">
+                            
+                            {/* Fecha y Hora (Móvil y Desktop) */}
+                            <div className="col-span-2 flex flex-row md:flex-col items-center md:items-start gap-2 md:gap-0 w-full md:w-auto">
+                              <span className="text-xs font-bold text-foreground/80 w-[45px] text-center md:text-left bg-muted md:bg-transparent rounded px-1.5 md:px-0 py-0.5 md:py-0">{formattedDate}</span>
+                              <span className="text-[10px] font-medium text-muted-foreground">{formattedTime}</span>
                             </div>
-                            <div className="flex items-center gap-3">
-                              <div className={`text-xl font-black ${isPositive ? 'text-green-600 dark:text-[#00FF00]' : 'text-red-600 dark:text-[#FF0000]'}`}>{isPositive ? '+' : ''}{tx.amount.toLocaleString()} pts</div>
-                              {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground opacity-50 group-hover:opacity-100 transition-opacity" />}
+
+                            {/* Descripción */}
+                            <div className="col-span-5 w-full">
+                              <p className="text-sm font-semibold text-foreground line-clamp-2 md:line-clamp-1 group-hover:text-primary transition-colors cursor-default" title={tx.description}>
+                                {tx.description}
+                              </p>
+                            </div>
+
+                            {/* Monto (Desktop lo alinea a la derecha, móvil lo pone en línea con el saldo) */}
+                            <div className="col-span-2 flex items-center md:justify-end w-full md:w-auto mt-2 md:mt-0">
+                              <span className="md:hidden text-[10px] font-bold text-muted-foreground uppercase mr-2">Monto:</span>
+                              <span className={cn("font-black text-base md:text-lg tabular-nums", isPositive ? "text-green-600 dark:text-[#00FF00]" : "text-foreground")}>
+                                {isPositive ? '+' : ''}{tx.amount.toLocaleString()} <span className="text-[10px] font-bold opacity-70 uppercase">pts</span>
+                              </span>
+                            </div>
+
+                            {/* Saldo Resultante */}
+                            <div className="col-span-3 flex items-center md:justify-end w-full md:w-auto md:pr-2">
+                              <span className="md:hidden text-[10px] font-bold text-muted-foreground uppercase mr-2">Saldo:</span>
+                              <span className="font-bold text-sm md:text-base text-muted-foreground tabular-nums">
+                                {tx.balanceAfter.toLocaleString()} <span className="text-[10px] font-bold opacity-70 uppercase">pts</span>
+                              </span>
                             </div>
                           </div>
-                          {isExpanded && (
-                            <div className="mt-4 pt-4 border-t border-border/50 grid grid-cols-3 gap-2 text-center animate-in fade-in slide-in-from-top-2">
-                              <div className="bg-background/50 p-2 rounded-lg"><p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1">Saldo Anterior</p><p className="font-semibold text-foreground">{tx.balanceBefore.toLocaleString()} pts</p></div>
-                              <div className="bg-background/50 p-2 rounded-lg"><p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1">Monto</p><p className={`font-black ${isPositive ? 'text-green-600 dark:text-[#00FF00]' : 'text-red-600 dark:text-[#FF0000]'}`}>{isPositive ? '+' : ''}{tx.amount.toLocaleString()} pts</p></div>
-                              <div className="bg-primary/10 border border-primary/20 p-2 rounded-lg"><p className="text-[10px] text-primary font-bold uppercase tracking-wider mb-1">Saldo Actualizado</p><p className="font-black text-primary">{tx.balanceAfter.toLocaleString()} pts</p></div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </TabsContent>
@@ -666,7 +693,7 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
 
-        {/* LA TRAMPA DE OSOS: BLOQUE DE REFERIDOS */}
+        {/* BLOQUE DE REFERIDOS */}
         <Card className="bg-gradient-to-br from-primary/10 via-background to-background border-primary/20 shadow-md rounded-2xl mb-8 overflow-hidden">
           <CardContent className="p-6 md:p-8">
             <div className="flex flex-col md:flex-row items-center gap-6">

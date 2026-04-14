@@ -26,8 +26,8 @@ interface Market {
   category: string;
   total_volume: number;
   end_date: string;
-  status: string; // Agregado para leer el estado de la BD
-  winning_outcome?: string | null; // Agregado para leer el ganador de la BD
+  status: string; 
+  winning_outcome?: string | null; 
   created_at: string;
   updated_at: string;
   trending?: "up" | "down";
@@ -108,7 +108,6 @@ export default function PredictionMarketDashboard() {
   const fetchMarkets = useCallback(async () => {
     setIsLoadingMarkets(true);
 
-    // ARREGLO: Traemos los mercados activos Y los resueltos para que se vean finalizados en el feed
     const { data, error } = await supabase
       .from("markets")
       .select(`
@@ -201,67 +200,68 @@ export default function PredictionMarketDashboard() {
     <div className="min-h-screen bg-background">
       <NavHeader points={userPoints} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode(!isDarkMode)} onPointsUpdate={handlePointsUpdate} userId={user?.id ?? null} userEmail={user?.email ?? null} onOpenAuthModal={() => setIsAuthModalOpen(true)} onSignOut={handleSignOut} isAdmin={userRole === "admin"} username={username} />
 
-      <main className="container mx-auto px-4 py-8 md:py-12 max-w-7xl">
-        <div className="mb-8 md:mb-12 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+      <main className="container mx-auto px-4 py-8 md:py-10 max-w-[1400px]">
+        <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
           <div>
-            <h1 className="text-4xl md:text-5xl font-extrabold mb-3 tracking-tight text-balance">
+            <h1 className="text-3xl md:text-4xl font-extrabold mb-2 tracking-tight text-balance">
               Mercado de <span className="text-primary">Predicciones</span>
             </h1>
-            <p className="text-muted-foreground text-base md:text-lg font-medium">Predecí el futuro y ganá puntos apostando a tus convicciones</p>
+            <p className="text-muted-foreground text-sm md:text-base font-medium">Predecí el futuro y ganá puntos apostando a tus convicciones</p>
           </div>
-          <Button onClick={() => user ? setIsCreateModalOpen(true) : setIsAuthModalOpen(true)} className="hidden md:flex shrink-0 h-12 px-6 rounded-full font-bold shadow-lg hover:shadow-primary/25 transition-all hover:-translate-y-1">
-            <Plus className="w-5 h-5 mr-2" /> Crear Mercado
+          <Button onClick={() => user ? setIsCreateModalOpen(true) : setIsAuthModalOpen(true)} className="hidden md:flex shrink-0 h-11 px-6 rounded-full font-bold shadow-lg hover:shadow-primary/25 transition-all hover:-translate-y-1">
+            <Plus className="w-4 h-4 mr-2" /> Crear Mercado
           </Button>
         </div>
 
-        <div className="bg-card/50 backdrop-blur-sm border border-border/50 rounded-2xl p-4 sm:p-6 mb-8 md:mb-10 shadow-sm">
+        <div className="bg-card/50 backdrop-blur-sm border border-border/50 rounded-2xl p-4 sm:p-5 mb-8 shadow-sm">
           <div className="flex flex-col xl:flex-row gap-4 xl:items-center">
             
             <div className="relative flex-1 max-w-xl">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input 
                 placeholder="Buscar mercados, eventos, debates..." 
                 value={searchQuery} 
                 onChange={(e) => setSearchQuery(e.target.value)} 
-                className="pl-12 bg-background border-border/60 h-12 rounded-full text-base focus-visible:ring-primary/30 transition-all shadow-inner" 
+                className="pl-11 bg-background border-border/60 h-11 rounded-full text-sm focus-visible:ring-primary/30 transition-all shadow-inner" 
               />
             </div>
 
             <div className="flex gap-2 overflow-x-auto pb-2 xl:pb-0 -mx-4 px-4 xl:mx-0 xl:px-0 xl:overflow-visible [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-              <Button variant={sortBy === "trending" ? "default" : "secondary"} onClick={() => setSortBy("trending")} className={cn("whitespace-nowrap shrink-0 h-10 rounded-full font-semibold transition-all", sortBy !== "trending" && "hover:bg-muted bg-background border border-border/50")}>
-                <Flame className={cn("w-4 h-4 mr-2", sortBy === "trending" ? "text-primary-foreground" : "text-orange-500")} /> Popular
+              <Button variant={sortBy === "trending" ? "default" : "secondary"} onClick={() => setSortBy("trending")} className={cn("whitespace-nowrap shrink-0 h-9 rounded-full text-sm font-semibold transition-all", sortBy !== "trending" && "hover:bg-muted bg-background border border-border/50")}>
+                <Flame className={cn("w-3.5 h-3.5 mr-2", sortBy === "trending" ? "text-primary-foreground" : "text-orange-500")} /> Popular
               </Button>
-              <Button variant={sortBy === "newest" ? "default" : "secondary"} onClick={() => setSortBy("newest")} className={cn("whitespace-nowrap shrink-0 h-10 rounded-full font-semibold transition-all", sortBy !== "newest" && "hover:bg-muted bg-background border border-border/50")}>
-                <Clock className={cn("w-4 h-4 mr-2", sortBy === "newest" ? "text-primary-foreground" : "text-blue-400")} /> Recientes
+              <Button variant={sortBy === "newest" ? "default" : "secondary"} onClick={() => setSortBy("newest")} className={cn("whitespace-nowrap shrink-0 h-9 rounded-full text-sm font-semibold transition-all", sortBy !== "newest" && "hover:bg-muted bg-background border border-border/50")}>
+                <Clock className={cn("w-3.5 h-3.5 mr-2", sortBy === "newest" ? "text-primary-foreground" : "text-blue-400")} /> Recientes
               </Button>
-              <Button variant={sortBy === "ending_soon" ? "default" : "secondary"} onClick={() => setSortBy("ending_soon")} className={cn("whitespace-nowrap shrink-0 h-10 rounded-full font-semibold transition-all", sortBy !== "ending_soon" && "hover:bg-muted bg-background border border-border/50")}>
-                <Timer className={cn("w-4 h-4 mr-2", sortBy === "ending_soon" ? "text-primary-foreground" : "text-red-400")} /> Próx. a terminar
+              <Button variant={sortBy === "ending_soon" ? "default" : "secondary"} onClick={() => setSortBy("ending_soon")} className={cn("whitespace-nowrap shrink-0 h-9 rounded-full text-sm font-semibold transition-all", sortBy !== "ending_soon" && "hover:bg-muted bg-background border border-border/50")}>
+                <Timer className={cn("w-3.5 h-3.5 mr-2", sortBy === "ending_soon" ? "text-primary-foreground" : "text-red-400")} /> Próx. a terminar
               </Button>
-              <Button variant={sortBy === "volume" ? "default" : "secondary"} onClick={() => setSortBy("volume")} className={cn("whitespace-nowrap shrink-0 h-10 rounded-full font-semibold transition-all", sortBy !== "volume" && "hover:bg-muted bg-background border border-border/50")}>
-                <TrendingUp className={cn("w-4 h-4 mr-2", sortBy === "volume" ? "text-primary-foreground" : "text-green-400")} /> Volumen
+              <Button variant={sortBy === "volume" ? "default" : "secondary"} onClick={() => setSortBy("volume")} className={cn("whitespace-nowrap shrink-0 h-9 rounded-full text-sm font-semibold transition-all", sortBy !== "volume" && "hover:bg-muted bg-background border border-border/50")}>
+                <TrendingUp className={cn("w-3.5 h-3.5 mr-2", sortBy === "volume" ? "text-primary-foreground" : "text-green-400")} /> Volumen
               </Button>
             </div>
           </div>
 
-          <div className="h-px w-full bg-border/50 my-4 xl:my-5" />
+          <div className="h-px w-full bg-border/50 my-4" />
 
           <div className="overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             <CategoryFilter selectedCategory={selectedCategory} onSelectCategory={setSelectedCategory} />
           </div>
         </div>
 
-        <div className="mb-6 flex items-center justify-between text-sm font-medium text-muted-foreground px-1">
+        <div className="mb-4 flex items-center justify-between text-xs font-medium text-muted-foreground px-1">
           <p>Explorando <span className="font-bold text-foreground">{sortedMarkets.length}</span> mercados {selectedCategory !== "all" && <span>en <span className="text-primary capitalize">{selectedCategory}</span></span>}</p>
         </div>
 
         {isLoadingMarkets ? (
           <div className="flex flex-col items-center justify-center py-24 gap-4">
-            <Loader2 className="w-10 h-10 animate-spin text-primary" />
-            <p className="text-muted-foreground font-medium">Cargando mercados...</p>
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            <p className="text-muted-foreground text-sm font-medium">Cargando mercados...</p>
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 md:gap-6">
+            {/* ACÁ ESTÁ EL CAMBIO DE GRILLA A 4 COLUMNAS (xl:grid-cols-4) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-5">
               {sortedMarkets.map((market) => (
                 <MarketCard
                   key={market.id}
@@ -283,14 +283,14 @@ export default function PredictionMarketDashboard() {
             </div>
 
             {sortedMarkets.length === 0 && (
-              <div className="text-center py-20 px-4 bg-muted/10 rounded-3xl border border-dashed border-border/50 mt-8">
-                <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-background border border-border/50 flex items-center justify-center shadow-sm">
-                  <Search className="w-10 h-10 text-muted-foreground" />
+              <div className="text-center py-20 px-4 bg-muted/10 rounded-3xl border border-dashed border-border/50 mt-6">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-background border border-border/50 flex items-center justify-center shadow-sm">
+                  <Search className="w-8 h-8 text-muted-foreground" />
                 </div>
-                <h3 className="text-xl font-bold mb-2">No se encontraron mercados</h3>
-                <p className="text-muted-foreground mb-6 max-w-md mx-auto">No hay predicciones activas con estos filtros. Podés ser el primero en abrir el debate.</p>
-                <Button size="lg" className="rounded-full font-bold shadow-md hover:-translate-y-1 transition-all" onClick={() => setIsCreateModalOpen(true)}>
-                  <Plus className="w-5 h-5 mr-2" /> Crear Nuevo Mercado
+                <h3 className="text-lg font-bold mb-2">No se encontraron mercados</h3>
+                <p className="text-sm text-muted-foreground mb-6 max-w-md mx-auto">No hay predicciones activas con estos filtros. Podés ser el primero en abrir el debate.</p>
+                <Button size="default" className="rounded-full font-bold shadow-md hover:-translate-y-1 transition-all" onClick={() => setIsCreateModalOpen(true)}>
+                  <Plus className="w-4 h-4 mr-2" /> Crear Nuevo Mercado
                 </Button>
               </div>
             )}
