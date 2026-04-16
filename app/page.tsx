@@ -174,8 +174,20 @@ export default function PredictionMarketDashboard() {
     });
   }, [markets, selectedCategory, searchQuery]);
 
+  // ACÁ ESTÁ LA MAGIA DEL ORDENAMIENTO
   const sortedMarkets = useMemo(() => {
+    const now = new Date().getTime(); // Tomamos la hora actual una sola vez
+
     return [...filteredMarkets].sort((a, b) => {
+      // 1. Chequeamos si el mercado está cerrado (por status o por fecha)
+      const isAClosed = a.status === 'resolved' || new Date(a.end_date).getTime() <= now;
+      const isBClosed = b.status === 'resolved' || new Date(b.end_date).getTime() <= now;
+
+      // 2. Regla de oro: Si A está cerrado y B está activo, B va arriba (A se empuja al fondo)
+      if (isAClosed && !isBClosed) return 1;
+      if (!isAClosed && isBClosed) return -1;
+
+      // 3. Si ambos tienen el mismo estado (ambos activos o ambos cerrados), aplicamos el filtro que eligió el usuario
       switch (sortBy) {
         case "trending": 
           return new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime();
@@ -253,7 +265,6 @@ export default function PredictionMarketDashboard() {
           <p>Explorando <span className="font-bold text-foreground">{sortedMarkets.length}</span> mercados {selectedCategory !== "all" && <span>en <span className="text-primary capitalize">{selectedCategory}</span></span>}</p>
         </div>
 
-        {/* ACÁ ESTÁ LA MAGIA DEL SKELETON LOADER */}
         {isLoadingMarkets ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-5">
             {[...Array(8)].map((_, i) => (
