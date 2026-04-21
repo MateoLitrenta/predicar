@@ -12,7 +12,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { createClient } from "@/lib/supabase/client";
 import { 
   Loader2, ArrowLeft, User as UserIcon, History, CheckCircle2, 
-  Clock, XCircle, TrendingUp, CalendarDays, Wallet, Coins, LineChart as LineChartIcon, Users, Trophy
+  Clock, XCircle, TrendingUp, CalendarDays, Wallet, Coins, LineChart as LineChartIcon, Users, Trophy, Scale, Target
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
@@ -234,6 +234,10 @@ export default function ProfileClient({ profileId }: ProfileClientProps) {
     return data;
   }, [processedTransactions, timeframe, portfolioStats, viewedProfile]);
 
+  const countActivePositions = useMemo(() => {
+    return userBets.filter(b => b.markets && ACTIVE_STATUSES.includes(String(b.markets.status).toLowerCase())).length;
+  }, [userBets]);
+
   const dynamicPnl = useMemo(() => {
     if (chartData.length < 2) return { value: 0, percentage: 0 };
     
@@ -273,15 +277,15 @@ export default function ProfileClient({ profileId }: ProfileClientProps) {
   const isProfit = dynamicPnl.value >= 0;
   const themeChartColor = isProfit ? (isDarkMode ? "#00FF00" : "#16a34a") : (isDarkMode ? "#FF0000" : "#dc2626");
 
-  const axisTextColor = isDarkMode ? '#a1a1aa' : '#64748b'; 
-  const axisLineColor = isDarkMode ? '#334155' : '#e2e8f0'; 
+  const axisTextColor = isDarkMode ? 'rgba(161, 161, 170, 0.4)' : 'rgba(100, 116, 139, 0.5)'; 
+  const axisLineColor = isDarkMode ? 'rgba(51, 65, 85, 0.3)' : 'rgba(226, 232, 240, 0.5)'; 
   const tooltipBgColor = isDarkMode ? '#0f172a' : '#ffffff'; 
   const tooltipTextColor = isDarkMode ? '#f8fafc' : '#0f172a';
 
   // --- SKELETON LOADER PARA EL PERFIL PÚBLICO ---
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex flex-col">
+      <div className="min-h-screen bg-muted/10 flex flex-col">
         <NavHeader points={myProfile?.points ?? 10000} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode(!isDarkMode)} onPointsUpdate={() => {}} userId={null} userEmail={null} onOpenAuthModal={() => {}} onSignOut={async () => {}} isAdmin={false} />
         <main className="container mx-auto px-4 py-8 flex-1 max-w-5xl">
           <div className="h-8 w-32 bg-muted/60 rounded animate-pulse mb-8" />
@@ -292,6 +296,19 @@ export default function ProfileClient({ profileId }: ProfileClientProps) {
             <div className="flex-1 w-full space-y-4 mt-2">
               <div className="h-10 w-48 bg-muted/60 rounded animate-pulse mx-auto sm:mx-0" />
               <div className="h-4 w-64 bg-muted/60 rounded animate-pulse mx-auto sm:mx-0" />
+            </div>
+          </div>
+
+          {/* Grilla de Métricas Skeleton */}
+          <div className="bg-card/30 border border-border/30 rounded-3xl p-6 md:p-10 mb-12 shadow-sm animate-pulse">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="flex flex-col">
+                  <div className="h-6 w-6 bg-muted/60 rounded mb-4" />
+                  <div className="h-3 w-40 bg-muted/60 rounded mb-2" />
+                  <div className="h-10 w-32 bg-muted/60 rounded" />
+                </div>
+              ))}
             </div>
           </div>
 
@@ -313,7 +330,7 @@ export default function ProfileClient({ profileId }: ProfileClientProps) {
 
   // RENDER NORMAL
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-muted/10 flex flex-col">
       <NavHeader points={myProfile?.points ?? 10000} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode(!isDarkMode)} onPointsUpdate={() => fetchAuth()} userId={currentUser?.id ?? null} userEmail={currentUser?.email ?? null} onOpenAuthModal={() => setIsAuthModalOpen(true)} onSignOut={async () => { await supabase.auth.signOut(); router.push("/"); }} isAdmin={myProfile?.role === "admin"} username={myProfile?.username} />
 
       <main className="container mx-auto px-4 py-8 flex-1 max-w-5xl">
@@ -344,35 +361,42 @@ export default function ProfileClient({ profileId }: ProfileClientProps) {
             </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-12">
-          
-          {/* STATS LATERALES */}
-          <div className="lg:col-span-1 space-y-6">
-            <Card className="bg-card border-border/50 shadow-sm rounded-2xl overflow-hidden p-6 text-center">
-              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary mx-auto mb-4"><Wallet className="w-6 h-6" /></div>
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Portfolio Total</p>
-              <p className="text-3xl font-black text-primary leading-none">{portfolioStats.totalPortfolioValue.toLocaleString()}</p>
-              <p className="text-xs font-bold text-muted-foreground mt-1">pts</p>
-            </Card>
+        {/* MÉTRICAS SUPERIORES */}
+        <div className="bg-card/40 backdrop-blur-xl border border-border/40 rounded-3xl p-8 md:p-12 mb-12 shadow-sm">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+            {/* Panel 1 */}
+            <div className="flex flex-col">
+              <TrendingUp className="w-6 h-6 text-muted-foreground mb-4 opacity-70" />
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1.5">PnL Total</p>
+              <p className={cn("text-3xl font-black", isProfit ? "text-green-600 dark:text-[#00FF00]" : "text-red-600 dark:text-[#FF0000]")}>
+                {isProfit ? '+' : ''}{dynamicPnl.value.toLocaleString()} pts
+              </p>
+              <p className="text-xs font-semibold text-muted-foreground mt-1">
+                {isProfit ? '+' : ''}{dynamicPnl.percentage.toFixed(2)}%
+              </p>
+            </div>
+            
+            {/* Panel 2 */}
+            <div className="flex flex-col">
+              <Scale className="w-6 h-6 text-muted-foreground mb-4 opacity-70" />
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1.5">Volumen Total Operado</p>
+              <p className="text-3xl font-black text-foreground">{(viewedProfile.volume_total ?? 0).toLocaleString()}</p>
+              <p className="text-xs font-semibold text-muted-foreground mt-1">pts acumulados</p>
+            </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <Card className="bg-card border-border/50 shadow-sm rounded-2xl p-4 text-center">
-                <div className="w-8 h-8 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-500 mx-auto mb-2"><LineChartIcon className="w-4 h-4" /></div>
-                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Predicciones</p>
-                <p className="text-xl font-bold text-foreground leading-none">{userBets.length}</p>
-              </Card>
-              <Card className={cn("border shadow-sm rounded-2xl p-4 text-center", viewedProfile.role === 'admin' ? "bg-green-500/10 border-green-500/30" : "bg-card border-border/50")}>
-                <div className={cn("w-8 h-8 rounded-full flex items-center justify-center mx-auto mb-2", viewedProfile.role === 'admin' ? "bg-green-500/20 text-green-600 dark:text-[#00FF00]" : "bg-muted/30 text-muted-foreground")}><Trophy className="w-4 h-4" /></div>
-                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Status</p>
-                <p className={cn("text-sm font-bold", viewedProfile.role === 'admin' ? "text-green-600 dark:text-[#00FF00]" : "text-foreground")}>{viewedProfile.role === 'admin' ? 'Fundador' : 'Trader'}</p>
-              </Card>
+            {/* Panel 3 */}
+            <div className="flex flex-col">
+              <Target className="w-6 h-6 text-muted-foreground mb-4 opacity-70" />
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1.5">Posiciones Activas</p>
+              <p className="text-3xl font-black text-foreground">{countActivePositions}</p>
+              <p className="text-xs font-semibold text-muted-foreground mt-1">Apuestas en curso</p>
             </div>
           </div>
+        </div>
 
-          {/* GRÁFICO PRINCIPAL */}
-          <div className="lg:col-span-3">
-            <Card className="bg-card border border-border/50 shadow-sm rounded-2xl overflow-hidden h-full flex flex-col">
-              <CardContent className="p-0 flex flex-col flex-1">
+        {/* GRÁFICO PRINCIPAL */}
+        <Card className="bg-card border border-border/50 shadow-sm rounded-2xl overflow-hidden mb-12">
+          <CardContent className="p-0">
                 <div className="p-6 border-b border-border/20 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                   <div>
                     <div className="flex items-center gap-2 font-bold text-muted-foreground mb-1">
@@ -404,13 +428,14 @@ export default function ProfileClient({ profileId }: ProfileClientProps) {
                   </div>
                 </div>
 
-                <div className="w-full flex-1 min-h-[300px] p-4 sm:p-6 pt-6">
+                <div className="w-full h-[350px] md:h-[450px] p-4 sm:p-6 pt-6">
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
                       <defs>
                         <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={themeChartColor} stopOpacity={0.2}/>
-                          <stop offset="95%" stopColor={themeChartColor} stopOpacity={0}/>
+                          <stop offset="5%" stopColor={themeChartColor} stopOpacity={0.15}/>
+                          <stop offset="60%" stopColor={themeChartColor} stopOpacity={0.03}/>
+                          <stop offset="100%" stopColor={themeChartColor} stopOpacity={0}/>
                         </linearGradient>
                       </defs>
                       <XAxis 
@@ -418,21 +443,22 @@ export default function ProfileClient({ profileId }: ProfileClientProps) {
                         type="number" 
                         domain={['dataMin', 'dataMax']} 
                         tickFormatter={xAxisFormatter}
-                        tick={{ fill: axisTextColor, fontSize: 11, fontWeight: 500 }}
+                        tick={{ fill: axisTextColor, fontSize: 11, fontWeight: 600 }}
                         tickLine={false}
-                        axisLine={{ stroke: axisLineColor, strokeWidth: 1.5 }}
-                        minTickGap={60}
-                        dy={10}
+                        axisLine={{ stroke: axisLineColor, strokeWidth: 1 }}
+                        minTickGap={80}
+                        dy={15}
                       />
                       <YAxis 
                         domain={['auto', 'auto']} 
                         tickFormatter={yAxisFormatter}
-                        tick={{ fill: axisTextColor, fontSize: 11, fontWeight: 500 }}
+                        tick={{ fill: axisTextColor, fontSize: 11, fontWeight: 600 }}
                         tickLine={false}
-                        axisLine={{ stroke: axisLineColor, strokeWidth: 1.5 }}
-                        width={50}
+                        axisLine={{ stroke: axisLineColor, strokeWidth: 1 }}
+                        width={55}
                         orientation="left"
                         dx={-10}
+                        tickCount={5}
                       />
                       <Tooltip 
                         formatter={customTooltipFormatter}
@@ -443,14 +469,14 @@ export default function ProfileClient({ profileId }: ProfileClientProps) {
                         cursor={{ stroke: axisTextColor, strokeWidth: 1, strokeDasharray: '4 4' }}
                       />
                       <Area 
-                        type="stepAfter" 
+                        type="monotone" 
                         dataKey="value" 
                         stroke={themeChartColor} 
-                        strokeWidth={2} 
+                        strokeWidth={2.5} 
                         fillOpacity={1} 
                         fill="url(#colorValue)" 
                         dot={false} 
-                        activeDot={{ r: 4, fill: themeChartColor, stroke: 'hsl(var(--background))', strokeWidth: 2 }} 
+                        activeDot={{ r: 5, fill: themeChartColor, stroke: 'hsl(var(--background))', strokeWidth: 2 }} 
                         isAnimationActive={false}
                       />
                     </AreaChart>
@@ -458,8 +484,6 @@ export default function ProfileClient({ profileId }: ProfileClientProps) {
                 </div>
               </CardContent>
             </Card>
-          </div>
-        </div>
 
         {/* TABLA DE PREDICCIONES (ESTILO LEDGER PÚBLICO) */}
         <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">

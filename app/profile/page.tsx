@@ -182,6 +182,20 @@ export default function ProfilePage() {
     });
   }, [transactions, profile?.points]);
 
+  const bonusStats = useMemo(() => {
+    if (!transactions.length) return { total: 0, count: 0 };
+    const bonusTxs = transactions.filter(tx => tx.description?.toLowerCase().includes('bonus') || tx.description?.toLowerCase().includes('bienvenida'));
+    const total = bonusTxs.reduce((acc, tx) => acc + Number(tx.amount || 0), 0);
+    return { total, count: bonusTxs.length };
+  }, [transactions]);
+
+  const salesStats = useMemo(() => {
+    if (!transactions.length) return { total: 0, count: 0 };
+    const salesTxs = transactions.filter(tx => tx.description?.toLowerCase().includes('vent') || tx.description?.toLowerCase().includes('cashout'));
+    const total = salesTxs.reduce((acc, tx) => acc + Number(tx.amount || 0), 0);
+    return { total, count: salesTxs.length };
+  }, [transactions]);
+
   const chartData = useMemo(() => {
     const chronological = [...processedTransactions].reverse(); 
     const offset = portfolioStats.lockedValueOffset; 
@@ -331,15 +345,15 @@ export default function ProfilePage() {
   const isProfit = dynamicPnl.value >= 0;
   const themeChartColor = isProfit ? (isDarkMode ? "#00FF00" : "#16a34a") : (isDarkMode ? "#FF0000" : "#dc2626");
   
-  const axisTextColor = isDarkMode ? '#a1a1aa' : '#64748b'; 
-  const axisLineColor = isDarkMode ? '#334155' : '#e2e8f0'; 
+  const axisTextColor = isDarkMode ? 'rgba(161, 161, 170, 0.4)' : 'rgba(100, 116, 139, 0.5)'; 
+  const axisLineColor = isDarkMode ? 'rgba(51, 65, 85, 0.3)' : 'rgba(226, 232, 240, 0.5)'; 
   const tooltipBgColor = isDarkMode ? '#0f172a' : '#ffffff'; 
   const tooltipTextColor = isDarkMode ? '#f8fafc' : '#0f172a';
 
   // --- ACÁ METEMOS EL SKELETON LOADER DEL PERFIL ---
   if (isChecking) {
     return (
-      <div className="min-h-screen bg-background flex flex-col">
+      <div className="min-h-screen bg-muted/10 flex flex-col">
         <NavHeader points={10000} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode(!isDarkMode)} onPointsUpdate={() => {}} userId={null} userEmail={null} onOpenAuthModal={() => {}} onSignOut={async () => {}} isAdmin={false} username={null} />
         
         <main className="container mx-auto px-4 py-8 flex-1 max-w-4xl">
@@ -363,14 +377,16 @@ export default function ProfilePage() {
           </div>
 
           {/* Grilla de Métricas */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-5 mb-12">
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className="h-[140px] bg-muted/30 rounded-2xl border border-border/50 animate-pulse flex flex-col items-center justify-center p-6">
-                <div className="w-10 h-10 rounded-full bg-muted/60 mb-4" />
-                <div className="h-2 w-16 bg-muted/60 rounded mb-2" />
-                <div className="h-6 w-20 bg-muted/60 rounded" />
-              </div>
-            ))}
+          <div className="bg-card/30 border border-border/30 rounded-3xl p-6 md:p-10 mb-12 shadow-sm animate-pulse">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="flex flex-col">
+                  <div className="h-6 w-6 bg-muted/60 rounded mb-4" />
+                  <div className="h-3 w-40 bg-muted/60 rounded mb-2" />
+                  <div className="h-10 w-32 bg-muted/60 rounded" />
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* Gráfico Gigante */}
@@ -395,7 +411,7 @@ export default function ProfilePage() {
   const displayName = profile.username || profile.email?.split("@")[0] || "Usuario";
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-muted/10 flex flex-col">
       <NavHeader points={profile.points ?? 10000} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode(!isDarkMode)} onPointsUpdate={() => {}} userId={profile.id} userEmail={profile.email ?? null} onOpenAuthModal={() => router.push("/")} onSignOut={async () => { await createClient().auth.signOut(); router.replace("/"); }} isAdmin={profile.role === "admin"} username={profile.username ?? null} />
 
       <main className="container mx-auto px-4 py-8 flex-1 max-w-4xl">
@@ -431,41 +447,31 @@ export default function ProfilePage() {
         </div>
 
         {/* MÉTRICAS SUPERIORES */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-5 mb-12">
-            <Card className="bg-primary/5 border border-primary/20 rounded-2xl p-6 flex flex-col items-center text-center shadow-sm">
-                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-4"><Wallet className="w-5 h-5" /></div>
-                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Portfolio Total</p>
-                <p className="text-3xl font-black text-primary leading-none">{portfolioStats.totalPortfolioValue.toLocaleString()}</p>
-                <p className="text-xs text-muted-foreground font-bold">pts</p>
-            </Card>
+        <div className="bg-card/40 backdrop-blur-xl border border-border/40 rounded-3xl p-8 md:p-12 mb-12 shadow-sm">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+            {/* Panel 1 */}
+            <div className="flex flex-col">
+              <Wallet className="w-6 h-6 text-muted-foreground mb-4 opacity-70" />
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1.5">Portfolio Total</p>
+              <p className="text-3xl font-black text-foreground">{portfolioStats.totalPortfolioValue.toLocaleString()} pts</p>
+            </div>
+            
+            {/* Panel 2 */}
+            <div className="flex flex-col">
+              <TrendingUp className="w-6 h-6 text-muted-foreground mb-4 opacity-70" />
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1.5">Posiciones Activas</p>
+              <p className="text-3xl font-black text-foreground">{portfolioStats.lockedValueOffset.toLocaleString()} pts</p>
+              <p className="text-xs font-semibold text-muted-foreground mt-1">{bets.filter(b => getMarket(b) && ACTIVE_STATUSES.includes(String(getMarket(b)!.status).toLowerCase())).length} Mercados</p>
+            </div>
 
-            <Card className="bg-card border border-border/50 rounded-2xl p-6 flex flex-col items-center text-center shadow-sm">
-                <div className="w-10 h-10 rounded-full bg-green-500/10 flex items-center justify-center text-green-600 dark:text-[#00FF00] mb-4"><Coins className="w-5 h-5" /></div>
-                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Puntos Líquidos</p>
-                <p className="text-3xl font-bold text-foreground leading-none">{profile.points?.toLocaleString() ?? 0}</p>
-                <p className="text-xs text-muted-foreground font-bold">pts</p>
-            </Card>
-
-            <Card className="bg-card border border-border/50 rounded-2xl p-6 flex flex-col items-center text-center shadow-sm">
-                <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-600 mb-4"><LineChart className="w-5 h-5" /></div>
-                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Inversiones</p>
-                <p className="text-3xl font-bold text-foreground leading-none">{bets.length}</p>
-                <p className="text-xs text-muted-foreground font-bold">operaciones</p>
-            </Card>
-
-            <Card className="bg-card border border-border/50 rounded-2xl p-6 flex flex-col items-center text-center shadow-sm">
-                <div className="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center text-amber-600 mb-4"><Users className="w-5 h-5" /></div>
-                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Referidos</p>
-                <p className="text-3xl font-bold text-foreground leading-none">{referredUsers.length}</p>
-                <p className="text-xs text-muted-foreground font-bold">usuarios</p>
-            </Card>
-
-            <Card className={cn("border rounded-2xl p-6 flex flex-col items-center text-center shadow-sm", profile.role === 'admin' ? "bg-green-500/10 border-green-500/30" : "bg-card border-border/50")}>
-                <div className={cn("w-10 h-10 rounded-full flex items-center justify-center mb-4", profile.role === 'admin' ? "bg-green-500/20 text-green-600 dark:text-[#00FF00]" : "bg-muted/30 text-muted-foreground")}><Trophy className="w-5 h-5" /></div>
-                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Membresía</p>
-                <p className={cn("text-3xl font-bold leading-none", profile.role === 'admin' ? "text-green-600 dark:text-[#00FF00]" : "text-foreground")}>{profile.role === 'admin' ? 'Fundador' : 'Usuario'}</p>
-                <p className="text-xs text-muted-foreground font-bold">rol Predix</p>
-            </Card>
+            {/* Panel 3 */}
+            <div className="flex flex-col">
+              <Coins className="w-6 h-6 text-muted-foreground mb-4 opacity-70" />
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1.5">Balance Líquido</p>
+              <p className="text-3xl font-black text-foreground">{(profile.points ?? 0).toLocaleString()} pts</p>
+              <p className="text-xs font-semibold text-muted-foreground mt-1">Puntos disponibles para operar</p>
+            </div>
+          </div>
         </div>
 
         {/* GRÁFICO PRINCIPAL */}
@@ -519,8 +525,9 @@ export default function ProfilePage() {
                 <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 10 }}>
                   <defs>
                     <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={themeChartColor} stopOpacity={0.2}/>
-                      <stop offset="95%" stopColor={themeChartColor} stopOpacity={0}/>
+                      <stop offset="5%" stopColor={themeChartColor} stopOpacity={0.15}/>
+                      <stop offset="60%" stopColor={themeChartColor} stopOpacity={0.03}/>
+                      <stop offset="100%" stopColor={themeChartColor} stopOpacity={0}/>
                     </linearGradient>
                   </defs>
                   
@@ -529,22 +536,23 @@ export default function ProfilePage() {
                     type="number" 
                     domain={['dataMin', 'dataMax']} 
                     tickFormatter={xAxisFormatter}
-                    tick={{ fill: axisTextColor, fontSize: 12, fontWeight: 500 }}
+                    tick={{ fill: axisTextColor, fontSize: 11, fontWeight: 600 }}
                     tickLine={false}
-                    axisLine={{ stroke: axisLineColor, strokeWidth: 1.5 }}
-                    minTickGap={60}
+                    axisLine={{ stroke: axisLineColor, strokeWidth: 1 }}
+                    minTickGap={80}
                     dy={15}
                   />
                   
                   <YAxis 
                     domain={['auto', 'auto']} 
                     tickFormatter={yAxisFormatter}
-                    tick={{ fill: axisTextColor, fontSize: 12, fontWeight: 500 }}
+                    tick={{ fill: axisTextColor, fontSize: 11, fontWeight: 600 }}
                     tickLine={false}
-                    axisLine={{ stroke: axisLineColor, strokeWidth: 1.5 }}
+                    axisLine={{ stroke: axisLineColor, strokeWidth: 1 }}
                     width={55}
                     orientation="left"
                     dx={-10}
+                    tickCount={5}
                   />
 
                   <Tooltip 
@@ -565,7 +573,7 @@ export default function ProfilePage() {
                   />
                   
                   <Area 
-                    type="stepAfter" 
+                    type="monotone" 
                     dataKey="value" 
                     stroke={themeChartColor} 
                     strokeWidth={2.5} 
