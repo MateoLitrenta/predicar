@@ -43,15 +43,15 @@ export function CategoryFilter({ selectedCategory, onSelectCategory }: CategoryF
         return (
           <Button
             key={cat.id}
-            variant={isSelected ? "default" : "outline"}
+            variant={isSelected ? "secondary" : "ghost"}
             size="sm"
             onClick={() => onSelectCategory(cat.id)}
             className={cn(
-              "whitespace-nowrap shrink-0 h-9 transition-all", // shrink-0 evita que los botones se aplasten
-              !isSelected && "border-border/50 hover:bg-muted/50"
+              "whitespace-nowrap shrink-0 h-8 rounded-md px-3 text-xs font-medium transition-colors",
+              isSelected ? "bg-muted text-foreground font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
             )}
           >
-            <Icon className="w-4 h-4 mr-2" />
+            <Icon className="w-3.5 h-3.5 mr-1.5" />
             {cat.label}
           </Button>
         );

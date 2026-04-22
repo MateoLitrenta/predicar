@@ -100,11 +100,11 @@ export function MarketCard({
         className={cn("group bg-card transition-all duration-200 border border-border/40 shadow-sm relative overflow-hidden flex flex-col h-full cursor-pointer hover:border-primary/40 hover:shadow-md", 
           isClosed ? "opacity-75 bg-muted/10" : "")}
       >
-        <CardContent className="p-4 sm:p-5 flex flex-col flex-1 gap-3">
+        <CardContent className="p-3.5 flex flex-col flex-1 gap-2.5">
           
           {/* HEADER: Imagen, Título y Categoría */}
-          <div className="flex gap-3 items-start">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-muted flex items-center justify-center shrink-0 border border-border/50 overflow-hidden relative">
+          <div className="flex gap-2.5 items-start">
+            <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center shrink-0 border border-border/50 overflow-hidden relative">
               {imageUrl ? (
                 <img src={imageUrl} alt="Market" className="w-full h-full object-cover" />
               ) : (
@@ -116,7 +116,7 @@ export function MarketCard({
                 <Badge 
                   variant="secondary" 
                   onClick={(e) => { e.stopPropagation(); if (onCategoryClick) onCategoryClick(category); }}
-                  className="text-[9px] uppercase tracking-wider px-1.5 py-0 h-4 bg-muted/50 text-muted-foreground hover:bg-primary/20 hover:text-primary cursor-pointer transition-colors"
+                  className="text-[10px] uppercase tracking-wider px-1.5 py-0 h-4 bg-muted/50 text-muted-foreground hover:bg-primary/20 hover:text-primary cursor-pointer transition-colors"
                 >
                   {category}
                 </Badge>
@@ -126,51 +126,72 @@ export function MarketCard({
                   </span>
                 )}
               </div>
-              <h3 className={cn("font-semibold text-[15px] sm:text-base leading-snug transition-colors line-clamp-2", isClosed ? "text-muted-foreground" : "text-foreground group-hover:text-primary")}>
+              <h3 className={cn("text-xs font-semibold leading-tight transition-colors line-clamp-2", isClosed ? "text-muted-foreground" : "text-foreground group-hover:text-primary")}>
                 {question}
               </h3>
             </div>
           </div>
 
-          {/* OPCIONES CON BARRAS DE PROGRESO (Estilo Polymarket) */}
-          <div className="space-y-1.5 flex-1 mt-1">
-            {sortedOptions.slice(0, 3).map((opt) => {
+          {/* OPCIONES TIPO PÍLDORA */}
+          <div className="flex flex-col gap-2 flex-1 mt-3">
+            {sortedOptions.slice(0, 2).map((opt) => {
               const pct = Math.round(getProbability(opt.total_votes));
               const isWinner = winningOutcome === opt.id;
               
+              const optNameLower = opt.option_name.toLowerCase();
+              const isYes = ['sí', 'si', 'yes'].includes(optNameLower);
+              const isNo = optNameLower === 'no';
+              
+              let pctColorClass = "";
+              let pctStyle = {};
+              let fillColor = opt.color || '#3b82f6';
+              
+              if (isYes) {
+                pctColorClass = "text-green-600 dark:text-green-400";
+                fillColor = '#22c55e'; // Verde para Sí
+              } else if (isNo) {
+                pctColorClass = "text-red-600 dark:text-red-400";
+                fillColor = '#ef4444'; // Rojo para No
+              } else {
+                pctStyle = { color: fillColor };
+              }
+              
               return (
-                <div key={opt.id} className="relative h-8 flex items-center justify-between px-2 rounded bg-muted/20 overflow-hidden text-xs sm:text-sm border border-transparent hover:border-border/50 transition-colors">
+                <div key={opt.id} className="relative overflow-hidden bg-muted/10 hover:bg-muted/20 transition-colors border border-border/50 rounded-lg h-9 w-full cursor-pointer">
                   {/* Barra de progreso de fondo */}
                   <div 
-                    className="absolute left-0 top-0 h-full opacity-20 transition-all duration-500 ease-out" 
-                    style={{ width: `${pct}%`, backgroundColor: opt.color }} 
+                    className="absolute top-0 left-0 h-full opacity-20 transition-all duration-500 ease-out" 
+                    style={{ width: `${pct}%`, backgroundColor: fillColor }} 
                   />
                   
-                  <div className="flex items-center gap-2 z-10 relative truncate pr-2">
-                    <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: opt.color }} />
-                    <span className={cn("font-medium truncate", isWinner && "font-bold text-primary")}>
-                      {opt.option_name}
+                  {/* Contenido (Textos por encima del fondo) */}
+                  <div className="relative z-10 flex justify-between items-center w-full h-full px-3">
+                    <div className="flex items-center gap-1.5 min-w-0 pr-2">
+                      {isResolved && isWinner && <Trophy className="w-3 h-3 text-primary shrink-0" />}
+                      <span className={cn("text-foreground/90 font-medium text-[11px] truncate", isWinner && "text-primary font-bold")}>
+                        {opt.option_name}
+                      </span>
+                    </div>
+                    <span className={cn("font-black text-xs shrink-0", pctColorClass)} style={pctStyle}>
+                      {pct}%
                     </span>
-                    {isResolved && isWinner && <Trophy className="w-3 h-3 text-primary ml-1 shrink-0" />}
                   </div>
-                  
-                  <span className="font-bold z-10 relative">{pct}%</span>
                 </div>
               );
             })}
             
-            {sortedOptions.length > 3 && (
-              <div className="text-[10px] text-muted-foreground text-center pt-1 font-medium">
-                + {sortedOptions.length - 3} opciones
+            {sortedOptions.length > 2 && (
+              <div className="text-[10px] text-muted-foreground text-center font-medium mt-2">
+                + {sortedOptions.length - 2} opciones
               </div>
             )}
           </div>
 
           {/* FOOTER: Meta info */}
-          <div className="flex items-center justify-between pt-3 mt-auto border-t border-border/40 text-muted-foreground text-[11px] font-medium">
-            <span className="flex items-center gap-1.5"><Coins className="w-3.5 h-3.5" /> {totalVolume} Vol.</span>
+          <div className="flex items-center gap-3 pt-2 mt-auto text-muted-foreground text-[10px] font-medium">
+            <span className="flex items-center gap-1"><Coins className="w-3 h-3" /> {totalVolume} Vol.</span>
             {!isClosed && (
-              <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> {endDate}</span>
+              <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {endDate}</span>
             )}
           </div>
 

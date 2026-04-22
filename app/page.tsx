@@ -212,57 +212,48 @@ export default function PredictionMarketDashboard() {
     <div className="min-h-screen bg-background">
       <NavHeader points={userPoints} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode(!isDarkMode)} onPointsUpdate={handlePointsUpdate} userId={user?.id ?? null} userEmail={user?.email ?? null} onOpenAuthModal={() => setIsAuthModalOpen(true)} onSignOut={handleSignOut} isAdmin={userRole === "admin"} username={username} />
 
-      <main className="container mx-auto px-4 py-8 md:py-10 max-w-[1400px]">
-        <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-          <div>
-            <h1 className="text-3xl md:text-4xl font-extrabold mb-2 tracking-tight text-balance">
-              Mercado de <span className="text-primary">Predicciones</span>
-            </h1>
-            <p className="text-muted-foreground text-sm md:text-base font-medium">Predecí el futuro y ganá puntos apostando a tus convicciones</p>
+      <main className="container mx-auto px-4 py-4 md:py-6 max-w-[1400px]">
+        {/* BARRA HORIZONTAL MINIMALISTA ESTILO KALSHI */}
+        <div className="flex flex-col lg:flex-row lg:items-center gap-3 lg:gap-6 mb-6 pb-4 border-b border-border/40 lg:pb-0 lg:h-14 lg:border-none">
+          
+          <div className="relative w-full lg:w-72 shrink-0">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input 
+              placeholder="Buscar mercados, eventos..." 
+              value={searchQuery} 
+              onChange={(e) => setSearchQuery(e.target.value)} 
+              className="pl-9 bg-muted/20 border-transparent hover:border-border/50 focus-visible:border-primary/50 h-9 rounded-lg text-sm transition-all shadow-none" 
+            />
           </div>
-          <Button onClick={() => user ? setIsCreateModalOpen(true) : setIsAuthModalOpen(true)} className="hidden md:flex shrink-0 h-11 px-6 rounded-full font-bold shadow-lg hover:shadow-primary/25 transition-all hover:-translate-y-1">
-            <Plus className="w-4 h-4 mr-2" /> Crear Mercado
+
+          <div className="flex-1 flex items-center gap-4 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+            <div className="flex shrink-0">
+              <CategoryFilter selectedCategory={selectedCategory} onSelectCategory={setSelectedCategory} />
+            </div>
+            
+            <div className="flex gap-1 shrink-0 ml-auto border-l border-border/40 pl-4 items-center">
+              <Button variant={sortBy === "trending" ? "secondary" : "ghost"} size="sm" onClick={() => setSortBy("trending")} className={cn("h-8 rounded-md px-2.5 text-xs font-semibold", sortBy === "trending" && "bg-muted/50 text-foreground")}>
+                Popular
+              </Button>
+              <Button variant={sortBy === "newest" ? "secondary" : "ghost"} size="sm" onClick={() => setSortBy("newest")} className={cn("h-8 rounded-md px-2.5 text-xs font-semibold", sortBy === "newest" && "bg-muted/50 text-foreground")}>
+                Nuevos
+              </Button>
+              <Button variant={sortBy === "ending_soon" ? "secondary" : "ghost"} size="sm" onClick={() => setSortBy("ending_soon")} className={cn("h-8 rounded-md px-2.5 text-xs font-semibold", sortBy === "ending_soon" && "bg-muted/50 text-foreground")}>
+                Cierran
+              </Button>
+              <Button variant={sortBy === "volume" ? "secondary" : "ghost"} size="sm" onClick={() => setSortBy("volume")} className={cn("h-8 rounded-md px-2.5 text-xs font-semibold", sortBy === "volume" && "bg-muted/50 text-foreground")}>
+                Volumen
+              </Button>
+            </div>
+          </div>
+
+          <Button size="sm" onClick={() => user ? setIsCreateModalOpen(true) : setIsAuthModalOpen(true)} className="hidden lg:flex shrink-0 h-9 px-4 rounded-lg font-bold shadow-sm transition-all">
+            <Plus className="w-4 h-4 mr-1.5" /> Crear
           </Button>
         </div>
 
-        <div className="bg-card/50 backdrop-blur-sm border border-border/50 rounded-2xl p-4 sm:p-5 mb-8 shadow-sm">
-          <div className="flex flex-col xl:flex-row gap-4 xl:items-center">
-            
-            <div className="relative flex-1 max-w-xl">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input 
-                placeholder="Buscar mercados, eventos, debates..." 
-                value={searchQuery} 
-                onChange={(e) => setSearchQuery(e.target.value)} 
-                className="pl-11 bg-background border-border/60 h-11 rounded-full text-sm focus-visible:ring-primary/30 transition-all shadow-inner" 
-              />
-            </div>
-
-            <div className="flex gap-2 overflow-x-auto pb-2 xl:pb-0 -mx-4 px-4 xl:mx-0 xl:px-0 xl:overflow-visible [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-              <Button variant={sortBy === "trending" ? "default" : "secondary"} onClick={() => setSortBy("trending")} className={cn("whitespace-nowrap shrink-0 h-9 rounded-full text-sm font-semibold transition-all", sortBy !== "trending" && "hover:bg-muted bg-background border border-border/50")}>
-                <Flame className={cn("w-3.5 h-3.5 mr-2", sortBy === "trending" ? "text-primary-foreground" : "text-orange-500")} /> Popular
-              </Button>
-              <Button variant={sortBy === "newest" ? "default" : "secondary"} onClick={() => setSortBy("newest")} className={cn("whitespace-nowrap shrink-0 h-9 rounded-full text-sm font-semibold transition-all", sortBy !== "newest" && "hover:bg-muted bg-background border border-border/50")}>
-                <Clock className={cn("w-3.5 h-3.5 mr-2", sortBy === "newest" ? "text-primary-foreground" : "text-blue-400")} /> Recientes
-              </Button>
-              <Button variant={sortBy === "ending_soon" ? "default" : "secondary"} onClick={() => setSortBy("ending_soon")} className={cn("whitespace-nowrap shrink-0 h-9 rounded-full text-sm font-semibold transition-all", sortBy !== "ending_soon" && "hover:bg-muted bg-background border border-border/50")}>
-                <Timer className={cn("w-3.5 h-3.5 mr-2", sortBy === "ending_soon" ? "text-primary-foreground" : "text-red-400")} /> Próx. a terminar
-              </Button>
-              <Button variant={sortBy === "volume" ? "default" : "secondary"} onClick={() => setSortBy("volume")} className={cn("whitespace-nowrap shrink-0 h-9 rounded-full text-sm font-semibold transition-all", sortBy !== "volume" && "hover:bg-muted bg-background border border-border/50")}>
-                <TrendingUp className={cn("w-3.5 h-3.5 mr-2", sortBy === "volume" ? "text-primary-foreground" : "text-green-400")} /> Volumen
-              </Button>
-            </div>
-          </div>
-
-          <div className="h-px w-full bg-border/50 my-4" />
-
-          <div className="overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-            <CategoryFilter selectedCategory={selectedCategory} onSelectCategory={setSelectedCategory} />
-          </div>
-        </div>
-
-        <div className="mb-4 flex items-center justify-between text-xs font-medium text-muted-foreground px-1">
-          <p>Explorando <span className="font-bold text-foreground">{sortedMarkets.length}</span> mercados {selectedCategory !== "all" && <span>en <span className="text-primary capitalize">{selectedCategory}</span></span>}</p>
+        <div className="mb-4 flex items-center justify-between text-[11px] font-medium text-muted-foreground px-1">
+          <p><span className="text-foreground">{sortedMarkets.length}</span> mercados {selectedCategory !== "all" && <span>en <span className="capitalize text-foreground">{selectedCategory}</span></span>}</p>
         </div>
 
         {isLoadingMarkets ? (
