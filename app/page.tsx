@@ -257,7 +257,7 @@ export default function PredictionMarketDashboard() {
         </div>
 
         {isLoadingMarkets ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4 md:gap-5">
             {[...Array(8)].map((_, i) => (
               <div key={i} className="flex flex-col rounded-2xl border border-border/40 bg-card p-4 sm:p-5 h-[260px] animate-in fade-in duration-500" style={{ animationDelay: `${i * 50}ms` }}>
                 <div className="flex gap-3 items-start">
@@ -281,7 +281,7 @@ export default function PredictionMarketDashboard() {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4 md:gap-5">
               {sortedMarkets.map((market) => (
                 <MarketCard
                   key={market.id}

@@ -126,7 +126,7 @@ export function MarketCard({
                   </span>
                 )}
               </div>
-              <h3 className={cn("text-xs font-semibold leading-tight transition-colors line-clamp-2", isClosed ? "text-muted-foreground" : "text-foreground group-hover:text-primary")}>
+              <h3 className={cn("text-sm font-semibold leading-tight transition-colors line-clamp-2", isClosed ? "text-muted-foreground" : "text-foreground group-hover:text-primary")}>
                 {question}
               </h3>
             </div>

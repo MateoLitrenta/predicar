@@ -212,7 +212,7 @@ export default function ProfileClient({ profileId }: ProfileClientProps) {
 
         const pastTxs = chronological.filter(tx => new Date(tx.created_at).getTime() <= ts);
         let baseBalance = 0;
-        
+
         if (pastTxs.length > 0) {
             baseBalance = pastTxs[pastTxs.length - 1].balanceAfter;
         } else if (chronological.length > 0) {
@@ -220,8 +220,76 @@ export default function ProfileClient({ profileId }: ProfileClientProps) {
         } else {
             baseBalance = viewedProfile?.points || 0;
         }
+
+        let activeBetsValueAtTs = 0;
+
+        let activeInvestments = new Map<string, { invested: number, firstBetTime: number }>();
         
-        let val = baseBalance + offset;
+        pastTxs.forEach(tx => {
+            if (!tx.market_id) return;
+            if (tx.type === 'bet') {
+                const current = activeInvestments.get(tx.market_id) || { invested: 0, firstBetTime: new Date(tx.created_at).getTime() };
+                current.invested += Math.abs(tx.amount);
+                activeInvestments.set(tx.market_id, current);
+            } else if (tx.amount > 0 && tx.type !== 'bonus') {
+                // Payout closes the position
+                activeInvestments.delete(tx.market_id);
+            }
+        });
+
+        activeInvestments.forEach((data, mId) => {
+            // Buscamos si hay una transacción de cierre DESPUÉS de este ts
+            const closingTx = chronological.find(tx => 
+                tx.market_id === mId && 
+                tx.type !== 'bet' && tx.amount > 0 && 
+                new Date(tx.created_at).getTime() > ts
+            );
+
+            let endTime = now;
+            let finalValue = 0;
+            let isLost = false;
+
+            if (closingTx) {
+                endTime = new Date(closingTx.created_at).getTime();
+                finalValue = closingTx.amount;
+            } else {
+                const betInfo = userBets.find(b => b.market_id === mId);
+                const market = betInfo?.markets;
+                
+                if (market && FINISHED_STATUSES.includes(String(market.status).toLowerCase())) {
+                    // Mercado resuelto sin payout (perdió)
+                    endTime = new Date(market.end_date || market.updated_at || now).getTime();
+                    finalValue = 0;
+                    if (ts >= endTime) {
+                        isLost = true;
+                    }
+                } else if (market) {
+                    // Activo hasta la actualidad
+                    endTime = now;
+                    const activeBetsForMarket = userBets.filter(b => b.market_id === mId && new Date(b.created_at).getTime() <= ts);
+                    finalValue = activeBetsForMarket.reduce((sum, b) => {
+                        const opt = marketOptions.find(o => o.id === b.outcome);
+                        return sum + (opt ? calculateRealCashout(b, market, opt) : 0);
+                    }, 0);
+                } else {
+                    isLost = true;
+                }
+            }
+
+            if (!isLost) {
+                const duration = endTime - data.firstBetTime;
+                let progress = 0;
+                if (duration > 0) {
+                    progress = (ts - data.firstBetTime) / duration;
+                }
+                progress = Math.max(0, Math.min(1, progress));
+                
+                const estValue = data.invested + (finalValue - data.invested) * progress;
+                activeBetsValueAtTs += estValue;
+            }
+        });
+        
+        let val = baseBalance + activeBetsValueAtTs;
         val = Math.max(0, val); 
         
         return { timestamp: ts, value: val };

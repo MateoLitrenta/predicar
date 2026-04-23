@@ -51,7 +51,7 @@ export default function ProfilePage() {
   const [bets, setBets] = useState<BetWithMarket[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [marketOptions, setMarketOptions] = useState<any[]>([]);
-  
+
   const [isChecking, setIsChecking] = useState(true);
   const [isLoadingBets, setIsLoadingBets] = useState(true);
   const [isLoadingTransactions, setIsLoadingTransactions] = useState(true);
@@ -81,11 +81,11 @@ export default function ProfilePage() {
   const fetchUserData = useCallback(async () => {
     setIsLoadingBets(true);
     setIsLoadingTransactions(true);
-    
+
     let refUsers: any[] = [];
     if (profile?.id) {
-       const { data, error } = await supabase.from("profiles").select("username").eq("referred_by", profile.id);
-       if (!error && data) refUsers = data;
+      const { data, error } = await supabase.from("profiles").select("username").eq("referred_by", profile.id);
+      if (!error && data) refUsers = data;
     }
 
     const [betsRes, txRes, optionsRes] = await Promise.all([
@@ -93,12 +93,12 @@ export default function ProfilePage() {
       getMyTransactions(),
       supabase.from("market_options").select("*")
     ]);
-    
+
     if (!betsRes.error && betsRes.data) setBets(betsRes.data);
     if (!txRes.error && txRes.data) setTransactions(txRes.data);
     if (optionsRes.data) setMarketOptions(optionsRes.data);
     setReferredUsers(refUsers);
-    
+
     setIsLoadingBets(false);
     setIsLoadingTransactions(false);
   }, [profile?.id, supabase]);
@@ -137,7 +137,7 @@ export default function ProfilePage() {
 
   const calculateRealCashout = useCallback((bet: any, market: any, opt: any) => {
     const shares = Number(bet.shares || 0);
-    if (shares <= 0) return Math.round(bet.amount * 0.95); 
+    if (shares <= 0) return Math.round(bet.amount * 0.95);
     const direction = bet.direction || 'yes';
     const optionVotes = Number(opt.total_votes || 0);
     const totalVol = Number(market.total_volume || 0);
@@ -145,7 +145,7 @@ export default function ProfilePage() {
     const startPriceYes = (optionVotes + 100.0) / (totalVol + (totalOptions * 100.0));
     const estPayout = shares * (direction === 'yes' ? startPriceYes : (1 - startPriceYes));
     let endPriceYes = 0;
-    if (direction === 'yes') { endPriceYes = Math.max(0.01, (optionVotes - estPayout + 100.0) / (Math.max(1, totalVol - estPayout) + (totalOptions * 100.0))); } 
+    if (direction === 'yes') { endPriceYes = Math.max(0.01, (optionVotes - estPayout + 100.0) / (Math.max(1, totalVol - estPayout) + (totalOptions * 100.0))); }
     else { endPriceYes = Math.max(0.01, (optionVotes + 100.0) / (Math.max(1, totalVol - estPayout) + (totalOptions * 100.0))); }
     let avgPriceYes = (startPriceYes + endPriceYes) / 2.0;
     avgPriceYes = Math.max(0.01, Math.min(0.99, avgPriceYes));
@@ -160,7 +160,7 @@ export default function ProfilePage() {
     bets
       .filter((b) => getMarket(b) && ACTIVE_STATUSES.includes(String(getMarket(b)!.status).toLowerCase()))
       .forEach((bet) => {
-        const market = getMarket(bet); 
+        const market = getMarket(bet);
         const opt = bet.option_details;
         if (market && opt) {
           totalCurrentValueActive += calculateRealCashout(bet, market, opt);
@@ -177,7 +177,7 @@ export default function ProfilePage() {
     return transactions.map((tx) => {
       const balanceAfter = currentTempBalance;
       const balanceBefore = currentTempBalance - tx.amount;
-      currentTempBalance = balanceBefore; 
+      currentTempBalance = balanceBefore;
       return { ...tx, balanceAfter, balanceBefore };
     });
   }, [transactions, profile?.points]);
@@ -197,108 +197,134 @@ export default function ProfilePage() {
   }, [transactions]);
 
   const chartData = useMemo(() => {
-    const chronological = [...processedTransactions].reverse(); 
-    const offset = portfolioStats.lockedValueOffset; 
+    const chronological = [...processedTransactions].reverse();
     const now = Date.now();
-    
+
     let startTimeForAll = now;
     if (profile?.created_at) {
-        startTimeForAll = new Date(profile.created_at).getTime();
+      startTimeForAll = new Date(profile.created_at).getTime();
     } else if (chronological.length > 0) {
-        startTimeForAll = new Date(chronological[0].created_at).getTime();
+      startTimeForAll = new Date(chronological[0].created_at).getTime();
     } else {
-        const d = new Date(now);
-        d.setMonth(d.getMonth() - 1);
-        startTimeForAll = d.getTime();
+      const d = new Date(now);
+      d.setMonth(d.getMonth() - 1);
+      startTimeForAll = d.getTime();
     }
-    
+
     let timestamps: number[] = [];
 
     if (timeframe === '1D') {
-        for(let i=24; i>=0; i--) timestamps.push(now - i * 3600 * 1000); 
+      for (let i = 24; i >= 0; i--) timestamps.push(now - i * 3600 * 1000);
     } else if (timeframe === '1W') {
-        for(let i=7; i>=0; i--) timestamps.push(now - i * 86400 * 1000); 
+      for (let i = 7; i >= 0; i--) timestamps.push(now - i * 86400 * 1000);
     } else if (timeframe === '1M') {
-        for(let i=30; i>=0; i--) timestamps.push(now - i * 86400 * 1000); 
+      for (let i = 30; i >= 0; i--) timestamps.push(now - i * 86400 * 1000);
     } else if (timeframe === '6M') {
-        for(let i=6; i>=0; i--) { 
-            const d = new Date(now);
-            d.setMonth(d.getMonth() - i);
-            timestamps.push(d.getTime());
-        }
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now);
+        d.setMonth(d.getMonth() - i);
+        timestamps.push(d.getTime());
+      }
     } else if (timeframe === '1Y') {
-        for(let i=12; i>=0; i--) { 
-            const d = new Date(now);
-            d.setMonth(d.getMonth() - i);
-            timestamps.push(d.getTime());
-        }
+      for (let i = 12; i >= 0; i--) {
+        const d = new Date(now);
+        d.setMonth(d.getMonth() - i);
+        timestamps.push(d.getTime());
+      }
     } else if (timeframe === 'ALL') {
-        const diff = now - startTimeForAll;
-        const steps = Math.max(1, Math.ceil(diff / (30 * 86400 * 1000))); 
-        for(let i=0; i<=steps; i++) {
-            timestamps.push(startTimeForAll + (diff / steps) * i);
-        }
+      const diff = now - startTimeForAll;
+      const steps = Math.max(1, Math.ceil(diff / (30 * 86400 * 1000)));
+      for (let i = 0; i <= steps; i++) {
+        timestamps.push(startTimeForAll + (diff / steps) * i);
+      }
     }
 
     const startTime = timestamps[0];
 
     chronological.forEach(tx => {
-        const txTime = new Date(tx.created_at).getTime();
-        if (txTime >= startTime && txTime <= now) timestamps.push(txTime);
+      const txTime = new Date(tx.created_at).getTime();
+      if (txTime >= startTime && txTime <= now) timestamps.push(txTime);
     });
 
     timestamps = Array.from(new Set(timestamps)).sort((a, b) => a - b);
 
     const data = timestamps.map(ts => {
-        const pastTxs = chronological.filter(tx => new Date(tx.created_at).getTime() <= ts);
-        let baseBalance = 0;
-        
-        if (pastTxs.length > 0) {
-            baseBalance = pastTxs[pastTxs.length - 1].balanceAfter;
-        } else if (chronological.length > 0) {
-            baseBalance = chronological[0].balanceBefore;
-        } else {
-            baseBalance = profile?.points || 0;
+      const pastTxs = chronological.filter(tx => new Date(tx.created_at).getTime() <= ts);
+      let baseBalance = 0;
+
+      if (pastTxs.length > 0) {
+        baseBalance = pastTxs[pastTxs.length - 1].balanceAfter;
+      } else if (chronological.length > 0) {
+        baseBalance = chronological[0].balanceBefore;
+      } else {
+        baseBalance = profile?.points || 0;
+      }
+
+      // --- INICIO DEL FIX DE PORTFOLIO VALUE ---
+      let historicalLockedValue = 0;
+
+      bets.forEach(bet => {
+        const betTime = new Date(bet.created_at).getTime();
+
+        // Solo sumamos el valor de las apuestas que YA EXISTÍAN en este momento del tiempo (ts)
+        if (betTime <= ts) {
+          const market = getMarket(bet);
+          if (!market) return;
+
+          const isActiveNow = ACTIVE_STATUSES.includes(String(market.status).toLowerCase());
+
+          if (isActiveNow) {
+            // Si la apuesta sigue activa hoy, sumamos su valor estimado para anular la caída
+            historicalLockedValue += calculateRealCashout(bet, market, bet.option_details);
+          } else {
+            // Si la apuesta ya cerró, sumamos su valor inicial SOLO si en este momento del pasado ('ts') todavía estaba viva.
+            const closeTime = market.end_date ? new Date(market.end_date).getTime() : 0;
+            if (closeTime > ts || !market.end_date) {
+              historicalLockedValue += Number(bet.amount || 0);
+            }
+          }
         }
-        
-        let val = baseBalance + offset;
-        val = Math.max(0, val);
-        
-        return { timestamp: ts, value: val };
+      });
+
+      let val = baseBalance + historicalLockedValue;
+      val = Math.max(0, val);
+      // --- FIN DEL FIX ---
+
+      return { timestamp: ts, value: val };
     });
 
     if (data.length === 0 || data[data.length - 1].timestamp !== now) {
-        data.push({ timestamp: now, value: portfolioStats.totalPortfolioValue });
+      data.push({ timestamp: now, value: portfolioStats.totalPortfolioValue });
     }
 
     return data;
-  }, [processedTransactions, timeframe, portfolioStats, profile]);
+  }, [processedTransactions, timeframe, portfolioStats, profile, bets, calculateRealCashout]); // <-- Dependencias actualizadas aquí
 
   const dynamicPnl = useMemo(() => {
     if (chartData.length < 2) return { value: 0, percentage: 0 };
-    
-    const startValue = chartData[0].value; 
+
+    const startValue = chartData[0].value;
     const endValue = chartData[chartData.length - 1].value;
-    
+
     const val = endValue - startValue;
-    
+
     let divisor = startValue;
     if (divisor === 0) divisor = 10000;
     const pct = (val / Math.abs(divisor)) * 100;
-    
+
     return { value: val, percentage: pct };
   }, [chartData]);
 
-  const confirmSell = async () => { 
+  const confirmSell = async () => {
     if (!betToSell) return;
     setSellingBetId(betToSell.id);
     const { ok, error, cashoutValue } = await sellBet(betToSell.id);
-    if (!ok) { toast({ title: "Error al vender", description: error || "Hubo un problema", variant: "destructive" }); } 
+    if (!ok) { toast({ title: "Error al vender", description: error || "Hubo un problema", variant: "destructive" }); }
     else { toast({ title: "¡Venta exitosa!", description: `Ganancias: ${cashoutValue?.toLocaleString()} pts.` }); await fetchAuth(); await fetchUserData(); }
-    setSellingBetId(null); setBetToSell(null); 
+    setSellingBetId(null); setBetToSell(null);
   };
 
-  const handleSaveProfile = async (e: React.FormEvent) => { 
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault(); if (!newUsername.trim()) return; setIsSaving(true);
     let finalAvatarUrl = profile.avatar_url;
     if (selectedImage) {
@@ -309,11 +335,11 @@ export default function ProfilePage() {
     }
     const { ok, error } = await updateProfileSettings(newUsername.trim(), finalAvatarUrl);
     setIsSaving(false);
-    if (error) { toast({ title: "Error", description: error, variant: "destructive" }); } 
+    if (error) { toast({ title: "Error", description: error, variant: "destructive" }); }
     else { toast({ title: "Perfil actualizado" }); setProfile({ ...profile, username: newUsername.trim(), avatar_url: finalAvatarUrl }); setIsEditModalOpen(false); setSelectedImage(null); router.refresh(); }
   };
 
-  const handleChangePassword = async (e: React.FormEvent) => { 
+  const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword !== confirmPassword || newPassword.length < 6) return;
     setIsChangingPassword(true);
@@ -323,7 +349,7 @@ export default function ProfilePage() {
   };
 
   const customTooltipFormatter = (value: number) => [`${value.toLocaleString()} pts`];
-  
+
   const customTooltipLabelFormatter = (label: number) => {
     const date = new Date(label);
     if (timeframe === '1D') return date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
@@ -344,18 +370,18 @@ export default function ProfilePage() {
 
   const isProfit = dynamicPnl.value >= 0;
   const themeChartColor = isProfit ? (isDarkMode ? "#00FF00" : "#16a34a") : (isDarkMode ? "#FF0000" : "#dc2626");
-  
-  const axisTextColor = isDarkMode ? 'rgba(161, 161, 170, 0.4)' : 'rgba(100, 116, 139, 0.5)'; 
-  const axisLineColor = isDarkMode ? 'rgba(51, 65, 85, 0.3)' : 'rgba(226, 232, 240, 0.5)'; 
-  const tooltipBgColor = isDarkMode ? '#0f172a' : '#ffffff'; 
+
+  const axisTextColor = isDarkMode ? 'rgba(161, 161, 170, 0.4)' : 'rgba(100, 116, 139, 0.5)';
+  const axisLineColor = isDarkMode ? 'rgba(51, 65, 85, 0.3)' : 'rgba(226, 232, 240, 0.5)';
+  const tooltipBgColor = isDarkMode ? '#0f172a' : '#ffffff';
   const tooltipTextColor = isDarkMode ? '#f8fafc' : '#0f172a';
 
   // --- ACÁ METEMOS EL SKELETON LOADER DEL PERFIL ---
   if (isChecking) {
     return (
       <div className="min-h-screen bg-muted/10 flex flex-col">
-        <NavHeader points={10000} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode(!isDarkMode)} onPointsUpdate={() => {}} userId={null} userEmail={null} onOpenAuthModal={() => {}} onSignOut={async () => {}} isAdmin={false} username={null} />
-        
+        <NavHeader points={10000} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode(!isDarkMode)} onPointsUpdate={() => { }} userId={null} userEmail={null} onOpenAuthModal={() => { }} onSignOut={async () => { }} isAdmin={false} username={null} />
+
         <main className="container mx-auto px-4 py-8 flex-1 max-w-4xl">
           {/* Botón Volver y Badge Area Personal */}
           <div className="flex items-center justify-between mb-8">
@@ -371,8 +397,8 @@ export default function ProfilePage() {
               <div className="h-4 w-64 bg-muted/60 rounded animate-pulse mx-auto sm:mx-0" />
             </div>
             <div className="hidden sm:flex gap-3">
-               <div className="h-9 w-9 bg-muted/60 rounded-md animate-pulse" />
-               <div className="h-9 w-24 bg-muted/60 rounded-md animate-pulse" />
+              <div className="h-9 w-9 bg-muted/60 rounded-md animate-pulse" />
+              <div className="h-9 w-24 bg-muted/60 rounded-md animate-pulse" />
             </div>
           </div>
 
@@ -395,11 +421,11 @@ export default function ProfilePage() {
           {/* Tabs y Contenido de Historial */}
           <div className="h-8 w-40 bg-muted/60 rounded animate-pulse mb-6" />
           <div className="h-[300px] w-full bg-muted/30 rounded-2xl border border-border/50 animate-pulse p-6">
-             <div className="h-12 w-full bg-muted/50 rounded-lg mb-8" />
-             <div className="space-y-4">
-                <div className="h-24 w-full bg-muted/60 rounded-xl" />
-                <div className="h-24 w-full bg-muted/60 rounded-xl" />
-             </div>
+            <div className="h-12 w-full bg-muted/50 rounded-lg mb-8" />
+            <div className="space-y-4">
+              <div className="h-24 w-full bg-muted/60 rounded-xl" />
+              <div className="h-24 w-full bg-muted/60 rounded-xl" />
+            </div>
           </div>
         </main>
       </div>
@@ -412,7 +438,7 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-muted/10 flex flex-col">
-      <NavHeader points={profile.points ?? 10000} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode(!isDarkMode)} onPointsUpdate={() => {}} userId={profile.id} userEmail={profile.email ?? null} onOpenAuthModal={() => router.push("/")} onSignOut={async () => { await createClient().auth.signOut(); router.replace("/"); }} isAdmin={profile.role === "admin"} username={profile.username ?? null} />
+      <NavHeader points={profile.points ?? 10000} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode(!isDarkMode)} onPointsUpdate={() => { }} userId={profile.id} userEmail={profile.email ?? null} onOpenAuthModal={() => router.push("/")} onSignOut={async () => { await createClient().auth.signOut(); router.replace("/"); }} isAdmin={profile.role === "admin"} username={profile.username ?? null} />
 
       <main className="container mx-auto px-4 py-8 flex-1 max-w-4xl">
         <div className="flex items-center justify-between mb-8">
@@ -424,26 +450,26 @@ export default function ProfilePage() {
 
         {/* PERFIL HEADER */}
         <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 mb-10">
-            <Avatar className="w-24 h-24 sm:w-28 sm:h-28 border-4 border-background bg-primary/10 shadow-lg shrink-0">
-                {profile.avatar_url ? <AvatarImage src={profile.avatar_url} className="object-cover" /> : <AvatarFallback><UserIcon className="w-12 h-12 text-primary opacity-50" /></AvatarFallback>}
-            </Avatar>
-            <div className="flex-1 w-full text-center sm:text-left">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-1">
-                    <div>
-                        <h1 className="text-3xl sm:text-4xl font-black text-foreground truncate tracking-tighter mb-1 flex items-center justify-center sm:justify-start gap-3">
-                            {displayName}
-                            <Badge className="bg-primary text-primary-foreground text-xs uppercase tracking-wider">VOS</Badge>
-                        </h1>
-                        <p className="text-sm text-muted-foreground font-medium flex items-center justify-center sm:justify-start gap-1.5 opacity-80">
-                            <CalendarDays className="w-3.5 h-3.5" /> Miembro desde: {new Date(profile.created_at || new Date()).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })}
-                        </p>
-                    </div>
-                    <div className="flex items-center justify-center sm:justify-end gap-3 mt-2 sm:mt-0">
-                      <Button variant="outline" size="icon" onClick={() => setIsPasswordModalOpen(true)}><Lock className="w-4 h-4" /></Button>
-                      <Button variant="outline" size="sm" onClick={() => { setNewUsername(profile.username || ""); setPreviewUrl(profile.avatar_url || null); setSelectedImage(null); setIsEditModalOpen(true); }}><Pencil className="w-4 h-4 mr-2" /> Editar</Button>
-                    </div>
-                </div>
+          <Avatar className="w-24 h-24 sm:w-28 sm:h-28 border-4 border-background bg-primary/10 shadow-lg shrink-0">
+            {profile.avatar_url ? <AvatarImage src={profile.avatar_url} className="object-cover" /> : <AvatarFallback><UserIcon className="w-12 h-12 text-primary opacity-50" /></AvatarFallback>}
+          </Avatar>
+          <div className="flex-1 w-full text-center sm:text-left">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-1">
+              <div>
+                <h1 className="text-3xl sm:text-4xl font-black text-foreground truncate tracking-tighter mb-1 flex items-center justify-center sm:justify-start gap-3">
+                  {displayName}
+                  <Badge className="bg-primary text-primary-foreground text-xs uppercase tracking-wider">VOS</Badge>
+                </h1>
+                <p className="text-sm text-muted-foreground font-medium flex items-center justify-center sm:justify-start gap-1.5 opacity-80">
+                  <CalendarDays className="w-3.5 h-3.5" /> Miembro desde: {new Date(profile.created_at || new Date()).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })}
+                </p>
+              </div>
+              <div className="flex items-center justify-center sm:justify-end gap-3 mt-2 sm:mt-0">
+                <Button variant="outline" size="icon" onClick={() => setIsPasswordModalOpen(true)}><Lock className="w-4 h-4" /></Button>
+                <Button variant="outline" size="sm" onClick={() => { setNewUsername(profile.username || ""); setPreviewUrl(profile.avatar_url || null); setSelectedImage(null); setIsEditModalOpen(true); }}><Pencil className="w-4 h-4 mr-2" /> Editar</Button>
+              </div>
             </div>
+          </div>
         </div>
 
         {/* MÉTRICAS SUPERIORES */}
@@ -455,7 +481,7 @@ export default function ProfilePage() {
               <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1.5">Portfolio Total</p>
               <p className="text-3xl font-black text-foreground">{portfolioStats.totalPortfolioValue.toLocaleString()} pts</p>
             </div>
-            
+
             {/* Panel 2 */}
             <div className="flex flex-col">
               <TrendingUp className="w-6 h-6 text-muted-foreground mb-4 opacity-70" />
@@ -482,16 +508,16 @@ export default function ProfilePage() {
                 <div className="flex items-center gap-2 font-bold text-muted-foreground mb-2">
                   <TrendingUp className="w-4 h-4" /> Crecimiento de Cuenta
                 </div>
-                
+
                 <div className="flex items-baseline gap-3 flex-wrap">
                   <span className={cn("text-4xl md:text-5xl font-black tracking-tight", isProfit ? "text-green-600 dark:text-[#00FF00]" : "text-red-600 dark:text-[#FF0000]")}>
                     {isProfit ? '+' : ''}{dynamicPnl.value.toLocaleString()} <span className="text-2xl opacity-80">pts</span>
                   </span>
-                  
-                  <Badge 
-                    variant="outline" 
+
+                  <Badge
+                    variant="outline"
                     className={cn(
-                      "text-sm md:text-base px-2 py-0.5 font-bold border-2", 
+                      "text-sm md:text-base px-2 py-0.5 font-bold border-2",
                       isProfit ? "bg-green-500/10 text-green-600 dark:text-[#00FF00] border-green-500/30 dark:border-[#00FF00]/30" : "bg-red-500/10 text-red-600 dark:text-[#FF0000] border-red-500/30 dark:border-[#FF0000]/30"
                     )}
                   >
@@ -506,11 +532,11 @@ export default function ProfilePage() {
 
               <div className="flex bg-muted/50 p-1 rounded-xl backdrop-blur-md border border-border/30 w-full md:w-auto overflow-x-auto">
                 {(['1D', '1W', '1M', '6M', '1Y', 'ALL'] as TimeframeType[]).map((tf) => (
-                  <button 
-                    key={tf} 
-                    onClick={() => setTimeframe(tf)} 
+                  <button
+                    key={tf}
+                    onClick={() => setTimeframe(tf)}
                     className={cn(
-                      "px-4 py-2 text-xs font-bold rounded-lg transition-all whitespace-nowrap flex-1 md:flex-none", 
+                      "px-4 py-2 text-xs font-bold rounded-lg transition-all whitespace-nowrap flex-1 md:flex-none",
                       timeframe === tf ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                     )}
                   >
@@ -525,16 +551,16 @@ export default function ProfilePage() {
                 <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 10 }}>
                   <defs>
                     <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={themeChartColor} stopOpacity={0.15}/>
-                      <stop offset="60%" stopColor={themeChartColor} stopOpacity={0.03}/>
-                      <stop offset="100%" stopColor={themeChartColor} stopOpacity={0}/>
+                      <stop offset="5%" stopColor={themeChartColor} stopOpacity={0.15} />
+                      <stop offset="60%" stopColor={themeChartColor} stopOpacity={0.03} />
+                      <stop offset="100%" stopColor={themeChartColor} stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  
-                  <XAxis 
-                    dataKey="timestamp" 
-                    type="number" 
-                    domain={['dataMin', 'dataMax']} 
+
+                  <XAxis
+                    dataKey="timestamp"
+                    type="number"
+                    domain={['dataMin', 'dataMax']}
                     tickFormatter={xAxisFormatter}
                     tick={{ fill: axisTextColor, fontSize: 11, fontWeight: 600 }}
                     tickLine={false}
@@ -542,9 +568,9 @@ export default function ProfilePage() {
                     minTickGap={80}
                     dy={15}
                   />
-                  
-                  <YAxis 
-                    domain={['auto', 'auto']} 
+
+                  <YAxis
+                    domain={['auto', 'auto']}
                     tickFormatter={yAxisFormatter}
                     tick={{ fill: axisTextColor, fontSize: 11, fontWeight: 600 }}
                     tickLine={false}
@@ -555,32 +581,32 @@ export default function ProfilePage() {
                     tickCount={5}
                   />
 
-                  <Tooltip 
+                  <Tooltip
                     formatter={customTooltipFormatter}
                     labelFormatter={customTooltipLabelFormatter}
-                    contentStyle={{ 
-                        backgroundColor: tooltipBgColor, 
-                        borderRadius: '12px', 
-                        border: `1px solid ${axisLineColor}`, 
-                        boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
-                        color: tooltipTextColor,
-                        fontWeight: 'bold',
-                        padding: '12px'
+                    contentStyle={{
+                      backgroundColor: tooltipBgColor,
+                      borderRadius: '12px',
+                      border: `1px solid ${axisLineColor}`,
+                      boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
+                      color: tooltipTextColor,
+                      fontWeight: 'bold',
+                      padding: '12px'
                     }}
                     itemStyle={{ color: themeChartColor, fontSize: '16px' }}
                     labelStyle={{ color: axisTextColor, marginBottom: '4px', fontSize: '12px' }}
                     cursor={{ stroke: axisTextColor, strokeWidth: 1, strokeDasharray: '4 4' }}
                   />
-                  
-                  <Area 
-                    type="monotone" 
-                    dataKey="value" 
-                    stroke={themeChartColor} 
-                    strokeWidth={2.5} 
-                    fillOpacity={1} 
-                    fill="url(#colorValue)" 
-                    dot={false} 
-                    activeDot={{ r: 5, fill: themeChartColor, stroke: 'hsl(var(--background))', strokeWidth: 2 }} 
+
+                  <Area
+                    type="monotone"
+                    dataKey="value"
+                    stroke={themeChartColor}
+                    strokeWidth={2.5}
+                    fillOpacity={1}
+                    fill="url(#colorValue)"
+                    dot={false}
+                    activeDot={{ r: 5, fill: themeChartColor, stroke: 'hsl(var(--background))', strokeWidth: 2 }}
                     isAnimationActive={false}
                   />
                 </AreaChart>
@@ -604,7 +630,7 @@ export default function ProfilePage() {
 
               <TabsContent value="active" className="space-y-4">
                 {isLoadingBets ? (
-                   <div className="flex items-center justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-primary opacity-60" /></div>
+                  <div className="flex items-center justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-primary opacity-60" /></div>
                 ) : bets.filter((b) => getMarket(b) && ACTIVE_STATUSES.includes(String(getMarket(b)!.status).toLowerCase())).length === 0 ? (
                   <div className="p-16 text-center text-muted-foreground bg-muted/10 border-2 border-dashed border-border/50 rounded-2xl">
                     <LineChart className="w-16 h-16 mx-auto mb-5 opacity-20" />
@@ -616,72 +642,72 @@ export default function ProfilePage() {
                 ) : (
                   <div className="space-y-4">
                     {bets.filter((b) => getMarket(b) && ACTIVE_STATUSES.includes(String(getMarket(b)!.status).toLowerCase())).map((bet) => {
-                        const market = getMarket(bet); const opt = bet.option_details;
-                        const isOldBinary = bet.outcome === "yes" || bet.outcome === "no";
-                        const displayOutcome = opt ? opt.option_name : (isOldBinary ? (bet.outcome === "yes" ? "SÍ" : "NO") : "Opción");
-                        const direction = (bet as any).direction || 'yes';
-                        const isOptBinary = ['sí', 'si', 'yes', 'no'].includes(displayOutcome.toLowerCase());
-                        let predictionText = isOptBinary ? (direction === 'no' ? (displayOutcome.toLowerCase().includes('s') ? 'No' : 'Sí') : displayOutcome) : `${direction === 'no' ? 'No' : 'Sí'} a ${displayOutcome}`;
-                        const isEffectivelyNo = direction === 'no' || (isOptBinary && displayOutcome.toLowerCase() === 'no' && direction === 'yes');
-                        
-                        let cashoutValue = 0, pnl = 0, pnlPercentage = 0;
-                        if (market) {
-                          const shares = Number((bet as any).shares || 0);
-                          cashoutValue = shares > 0 && opt ? calculateRealCashout(bet, market, opt) : Math.round(bet.amount * 0.95);
-                          pnl = cashoutValue - bet.amount; pnlPercentage = (pnl / bet.amount) * 100;
-                        }
+                      const market = getMarket(bet); const opt = bet.option_details;
+                      const isOldBinary = bet.outcome === "yes" || bet.outcome === "no";
+                      const displayOutcome = opt ? opt.option_name : (isOldBinary ? (bet.outcome === "yes" ? "SÍ" : "NO") : "Opción");
+                      const direction = (bet as any).direction || 'yes';
+                      const isOptBinary = ['sí', 'si', 'yes', 'no'].includes(displayOutcome.toLowerCase());
+                      let predictionText = isOptBinary ? (direction === 'no' ? (displayOutcome.toLowerCase().includes('s') ? 'No' : 'Sí') : displayOutcome) : `${direction === 'no' ? 'No' : 'Sí'} a ${displayOutcome}`;
+                      const isEffectivelyNo = direction === 'no' || (isOptBinary && displayOutcome.toLowerCase() === 'no' && direction === 'yes');
 
-                        return (
-                          <div key={bet.id} className="rounded-2xl border border-border/50 bg-card hover:border-primary/50 transition-all p-5 md:p-7 shadow-sm relative overflow-hidden group">
-                            <Link href={`/market/${bet.market_id}`} className="block"><p className="font-bold text-lg md:text-xl text-foreground line-clamp-2 mb-5 leading-tight group-hover:text-primary transition-colors pr-12">{market?.title ?? "Mercado"}</p></Link>
-                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-5 md:gap-8 bg-muted/10 md:bg-transparent p-5 md:p-0 rounded-xl border md:border-none border-border/50">
-                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-5 md:gap-10">
-                                 <div className="flex flex-col"><p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1.5">Inversión</p><p className="font-black text-foreground text-xl md:text-2xl leading-none">{bet.amount.toLocaleString()} <span className="text-xs font-bold text-muted-foreground">pts</span></p></div>
-                                 <div className="flex flex-col"><p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1.5">Posición</p><Badge variant="outline" className={cn("text-xs md:text-sm font-bold border h-8 justify-center w-fit", isEffectivelyNo ? "bg-red-500/10 text-red-600 dark:text-red-500 border-red-500/30 dark:border-[#FF0000]/30" : "bg-green-500/10 text-green-600 dark:text-[#00FF00] border-green-500/30 dark:border-[#00FF00]/30")}>{predictionText}</Badge></div>
-                                 <div className="flex flex-col min-w-[90px] col-span-2 sm:col-span-1"><p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1.5 hidden md:block">Retorno</p>
-                                   <div className="flex items-center gap-2"><span className={cn("font-black text-xl md:text-2xl leading-none", pnl >= 0 ? "text-green-600 dark:text-[#00FF00]" : "text-red-600 dark:text-[#FF0000]")}>{pnl >= 0 ? "+" : ""}{pnlPercentage.toFixed(1)}%</span></div>
-                                 </div>
-                              </div>
-                              
-                              <div className="w-full md:w-auto mt-2 md:mt-0 pt-4 md:pt-0 border-t md:border-t-0 border-border/50">
-                                <Button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setBetToSell({ id: bet.id, title: market?.title ?? "Mercado", outcomeName: predictionText, direction: direction, cashoutValue: cashoutValue, pnl: pnl, pnlPercentage: pnlPercentage }); }} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black h-11 px-7 w-full md:w-auto shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all rounded-full" ><Coins className="w-4 h-4 mr-2" /> Vender por {cashoutValue.toLocaleString()} pts</Button>
+                      let cashoutValue = 0, pnl = 0, pnlPercentage = 0;
+                      if (market) {
+                        const shares = Number((bet as any).shares || 0);
+                        cashoutValue = shares > 0 && opt ? calculateRealCashout(bet, market, opt) : Math.round(bet.amount * 0.95);
+                        pnl = cashoutValue - bet.amount; pnlPercentage = (pnl / bet.amount) * 100;
+                      }
+
+                      return (
+                        <div key={bet.id} className="rounded-2xl border border-border/50 bg-card hover:border-primary/50 transition-all p-5 md:p-7 shadow-sm relative overflow-hidden group">
+                          <Link href={`/market/${bet.market_id}`} className="block"><p className="font-bold text-lg md:text-xl text-foreground line-clamp-2 mb-5 leading-tight group-hover:text-primary transition-colors pr-12">{market?.title ?? "Mercado"}</p></Link>
+                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-5 md:gap-8 bg-muted/10 md:bg-transparent p-5 md:p-0 rounded-xl border md:border-none border-border/50">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-5 md:gap-10">
+                              <div className="flex flex-col"><p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1.5">Inversión</p><p className="font-black text-foreground text-xl md:text-2xl leading-none">{bet.amount.toLocaleString()} <span className="text-xs font-bold text-muted-foreground">pts</span></p></div>
+                              <div className="flex flex-col"><p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1.5">Posición</p><Badge variant="outline" className={cn("text-xs md:text-sm font-bold border h-8 justify-center w-fit", isEffectivelyNo ? "bg-red-500/10 text-red-600 dark:text-red-500 border-red-500/30 dark:border-[#FF0000]/30" : "bg-green-500/10 text-green-600 dark:text-[#00FF00] border-green-500/30 dark:border-[#00FF00]/30")}>{predictionText}</Badge></div>
+                              <div className="flex flex-col min-w-[90px] col-span-2 sm:col-span-1"><p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1.5 hidden md:block">Retorno</p>
+                                <div className="flex items-center gap-2"><span className={cn("font-black text-xl md:text-2xl leading-none", pnl >= 0 ? "text-green-600 dark:text-[#00FF00]" : "text-red-600 dark:text-[#FF0000]")}>{pnl >= 0 ? "+" : ""}{pnlPercentage.toFixed(1)}%</span></div>
                               </div>
                             </div>
+
+                            <div className="w-full md:w-auto mt-2 md:mt-0 pt-4 md:pt-0 border-t md:border-t-0 border-border/50">
+                              <Button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setBetToSell({ id: bet.id, title: market?.title ?? "Mercado", outcomeName: predictionText, direction: direction, cashoutValue: cashoutValue, pnl: pnl, pnlPercentage: pnlPercentage }); }} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black h-11 px-7 w-full md:w-auto shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all rounded-full" ><Coins className="w-4 h-4 mr-2" /> Vender por {cashoutValue.toLocaleString()} pts</Button>
+                            </div>
                           </div>
-                        );
-                      })}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </TabsContent>
 
               <TabsContent value="finished" className="space-y-4">
-                 {bets.filter((b) => getMarket(b) && FINISHED_STATUSES.includes(String(getMarket(b)!.status).toLowerCase())).length === 0 ? (
+                {bets.filter((b) => getMarket(b) && FINISHED_STATUSES.includes(String(getMarket(b)!.status).toLowerCase())).length === 0 ? (
                   <div className="p-12 text-center text-muted-foreground"><History className="w-12 h-12 mx-auto mb-4 opacity-20" /><p>Aún no hay resultados de tus apuestas.</p></div>
                 ) : (
                   <div className="space-y-4">
                     {bets.filter((b) => getMarket(b) && FINISHED_STATUSES.includes(String(getMarket(b)!.status).toLowerCase())).map((bet) => {
-                        const market = getMarket(bet); const opt = bet.option_details; const direction = (bet as any).direction || 'yes';
-                        const displayOutcome = opt ? opt.option_name : 'Opción';
-                        const isOptBinary = ['sí', 'si', 'yes', 'no'].includes(displayOutcome.toLowerCase());
-                        let predictionText = isOptBinary ? (direction === 'no' ? (displayOutcome.toLowerCase().includes('s') ? 'No' : 'Sí') : displayOutcome) : `${direction === 'no' ? 'No' : 'Sí'} a ${displayOutcome}`;
-                        const isEffectivelyNo = direction === 'no' || (isOptBinary && displayOutcome.toLowerCase() === 'no' && direction === 'yes');
-                        const won = (direction === 'yes' && market?.winning_outcome === bet.outcome) || (direction === 'no' && market?.winning_outcome !== bet.outcome && market?.winning_outcome !== null);
+                      const market = getMarket(bet); const opt = bet.option_details; const direction = (bet as any).direction || 'yes';
+                      const displayOutcome = opt ? opt.option_name : 'Opción';
+                      const isOptBinary = ['sí', 'si', 'yes', 'no'].includes(displayOutcome.toLowerCase());
+                      let predictionText = isOptBinary ? (direction === 'no' ? (displayOutcome.toLowerCase().includes('s') ? 'No' : 'Sí') : displayOutcome) : `${direction === 'no' ? 'No' : 'Sí'} a ${displayOutcome}`;
+                      const isEffectivelyNo = direction === 'no' || (isOptBinary && displayOutcome.toLowerCase() === 'no' && direction === 'yes');
+                      const won = (direction === 'yes' && market?.winning_outcome === bet.outcome) || (direction === 'no' && market?.winning_outcome !== bet.outcome && market?.winning_outcome !== null);
 
-                        return (
-                          <div key={bet.id} className="rounded-xl border border-border/50 bg-muted/10 p-4 md:p-6 opacity-90">
-                            <p className="font-bold text-foreground line-clamp-2 mb-4">{market?.title ?? "Mercado"}</p>
-                            <div className="flex flex-col md:flex-row md:items-center justify-between bg-background p-4 rounded-lg border border-border/50 gap-4">
-                               <div className="flex items-center gap-6 md:gap-10">
-                                 <div className="flex flex-col"><p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1">Inversión</p><p className="font-bold text-foreground text-base md:text-lg">{bet.amount.toLocaleString()} pts</p></div>
-                                 <div className="flex flex-col"><p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1">Predicción</p><Badge variant="outline" className={cn("text-xs font-bold border h-7", isEffectivelyNo ? "bg-red-500/10 text-red-600 dark:text-red-500 border-red-500/30" : "bg-green-500/10 text-green-600 dark:text-green-500 border-green-500/30")}>{predictionText}</Badge></div>
-                               </div>
-                               <div className="pt-2 md:pt-0 border-t md:border-t-0 border-border/50 w-full md:w-auto text-right">
-                                 {won ? <span className="font-black text-lg text-green-600 dark:text-[#00FF00] flex items-center justify-end gap-1.5"><CheckCircle2 className="w-5 h-5" /> Acertó</span> : <span className="font-black text-lg text-red-600 dark:text-[#FF0000] flex items-center justify-end gap-1.5 opacity-90"><XCircle className="w-5 h-5" /> Perdió</span>}
-                               </div>
+                      return (
+                        <div key={bet.id} className="rounded-xl border border-border/50 bg-muted/10 p-4 md:p-6 opacity-90">
+                          <p className="font-bold text-foreground line-clamp-2 mb-4">{market?.title ?? "Mercado"}</p>
+                          <div className="flex flex-col md:flex-row md:items-center justify-between bg-background p-4 rounded-lg border border-border/50 gap-4">
+                            <div className="flex items-center gap-6 md:gap-10">
+                              <div className="flex flex-col"><p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1">Inversión</p><p className="font-bold text-foreground text-base md:text-lg">{bet.amount.toLocaleString()} pts</p></div>
+                              <div className="flex flex-col"><p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-1">Predicción</p><Badge variant="outline" className={cn("text-xs font-bold border h-7", isEffectivelyNo ? "bg-red-500/10 text-red-600 dark:text-red-500 border-red-500/30" : "bg-green-500/10 text-green-600 dark:text-green-500 border-green-500/30")}>{predictionText}</Badge></div>
+                            </div>
+                            <div className="pt-2 md:pt-0 border-t md:border-t-0 border-border/50 w-full md:w-auto text-right">
+                              {won ? <span className="font-black text-lg text-green-600 dark:text-[#00FF00] flex items-center justify-end gap-1.5"><CheckCircle2 className="w-5 h-5" /> Acertó</span> : <span className="font-black text-lg text-red-600 dark:text-[#FF0000] flex items-center justify-end gap-1.5 opacity-90"><XCircle className="w-5 h-5" /> Perdió</span>}
                             </div>
                           </div>
-                        );
-                      })}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </TabsContent>
@@ -704,7 +730,7 @@ export default function ProfilePage() {
                       <div className="col-span-2 text-right">Monto</div>
                       <div className="col-span-3 text-right pr-2">Saldo Resultante</div>
                     </div>
-                    
+
                     {/* Filas de la tabla */}
                     <div className="divide-y divide-border/30 max-h-[600px] overflow-y-auto">
                       {processedTransactions.map((tx) => {
@@ -714,7 +740,7 @@ export default function ProfilePage() {
 
                         return (
                           <div key={tx.id} className="group flex flex-col md:grid md:grid-cols-12 gap-2 md:gap-4 p-4 hover:bg-muted/10 transition-colors items-start md:items-center">
-                            
+
                             {/* Fecha y Hora (Móvil y Desktop) */}
                             <div className="col-span-2 flex flex-row md:flex-col items-center md:items-start gap-2 md:gap-0 w-full md:w-auto">
                               <span className="text-xs font-bold text-foreground/80 w-[45px] text-center md:text-left bg-muted md:bg-transparent rounded px-1.5 md:px-0 py-0.5 md:py-0">{formattedDate}</span>
@@ -801,7 +827,7 @@ export default function ProfilePage() {
           <DialogFooter className="mt-4"><Button variant="outline" onClick={() => setBetToSell(null)} className="font-bold rounded-lg">Cancelar</Button><Button onClick={confirmSell} disabled={sellingBetId === betToSell?.id} className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-lg px-6 shadow-md">{sellingBetId === betToSell?.id ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Coins className="w-5 h-5 mr-2" />} Vender Ahora</Button></DialogFooter>
         </DialogContent>
       </Dialog>
-      
+
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
         <DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>Editar Perfil</DialogTitle></DialogHeader><form onSubmit={handleSaveProfile} className="space-y-4 pt-4"><div className="flex flex-col items-center gap-4 mb-6"><div className="relative w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center border-2 border-border overflow-hidden">{previewUrl ? <img src={previewUrl} alt="Avatar" className="w-full h-full object-cover" /> : <AvatarFallback><UserIcon className="w-10 h-10 text-primary opacity-50" /></AvatarFallback>}</div><input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => { if (e.target.files && e.target.files[0]) { setSelectedImage(e.target.files[0]); setPreviewUrl(URL.createObjectURL(e.target.files[0])); } }} /><Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>Cambiar foto</Button></div><div className="space-y-2"><Label htmlFor="username">Nombre de usuario</Label><Input id="username" value={newUsername} onChange={(e) => setNewUsername(e.target.value)} required /></div><Button type="submit" className="w-full mt-4" disabled={isSaving}>{isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null} Guardar Cambios</Button></form></DialogContent>
       </Dialog>

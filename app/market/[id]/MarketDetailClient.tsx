@@ -276,10 +276,50 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
     } else {
       const optionName = options.find(o => o.id === selectedOptionId)?.option_name || "la opción";
       const directionText = selectedDirection === 'yes' ? 'a favor de' : 'en contra de';
+      
+      // Registrar la transacción
+      await supabase.from("transactions").insert({
+        user_id: user.id,
+        amount: -numericAmount,
+        type: "bet",
+        description: `Apuesta en ${market.title}`,
+        market_id: marketId,
+      });
+
+      // Disparar la notificación
+      await supabase.from("notifications").insert({
+        user_id: user.id,
+        title: "Apuesta confirmada",
+        message: `Invertiste ${numericAmount} pts en la opción ${optionName}`,
+        type: "trade",
+        read: false,
+        market_id: marketId,
+      });
+
+      // Actualizar el historial de precios del mercado
+      const { data: updatedOptions } = await supabase.from("market_options").select("*").eq("market_id", marketId);
+      if (updatedOptions && updatedOptions.length > 0) {
+        const newTotalVotes = updatedOptions.reduce((acc, opt) => acc + Number(opt.total_votes || 0), 0);
+        const totalOptsCount = updatedOptions.length;
+        
+        const historyInserts = updatedOptions.map(opt => {
+          let price = (Number(opt.total_votes || 0) + 100.0) / (newTotalVotes + (totalOptsCount * 100.0));
+          price = Math.max(0.01, Math.min(0.99, price));
+          return {
+            market_id: marketId,
+            option_id: opt.id,
+            percentage: price * 100
+          };
+        });
+
+        await supabase.from("market_option_history").insert(historyInserts);
+      }
+
       toast({ title: "¡Orden ejecutada!", description: `Compraste acciones ${directionText} ${optionName}` });
       setBetAmount("");
       fetchUserAndProfile();
       fetchUserBets();
+      fetchData(); // Refrescar los datos del gráfico y el mercado
     }
   };
 
@@ -928,8 +968,8 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
               )}
             </div>
             
-            <div className="hidden lg:block">{ReglasBlock}</div>
             <div className="hidden lg:block">{DebateBlock}</div>
+            <div className="hidden lg:block">{ReglasBlock}</div>
             
           </div>
 
@@ -1180,10 +1220,10 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
 
           </div>
 
-          <div className="block lg:hidden w-full order-3 mt-2">{ReglasBlock}</div>
-          <div className="block lg:hidden w-full order-4 mt-2">{TopHoldersBlock}</div>
+          <div className="block lg:hidden w-full order-3 mt-2">{TopHoldersBlock}</div>
+          <div className="block lg:hidden w-full order-4 mt-2">{UltimasApuestasBlock}</div>
           <div className="block lg:hidden w-full order-5 mt-2">{DebateBlock}</div>
-          <div className="block lg:hidden w-full order-6 mt-2">{UltimasApuestasBlock}</div>
+          <div className="block lg:hidden w-full order-6 mt-2">{ReglasBlock}</div>
         </div>
 
         <Dialog open={isShareModalOpen} onOpenChange={setIsShareModalOpen}>
