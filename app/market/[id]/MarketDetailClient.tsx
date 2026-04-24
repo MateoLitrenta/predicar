@@ -1161,7 +1161,7 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
                           let displayOutcome = opt?.option_name || '';
                           let optColor = opt?.color || '#0ea5e9';
 
-                          // FIX 1: Soporte para apuestas viejas (Legacy) donde el outcome era el string 'yes' o 'no'
+                          // FIX 1: Soporte para apuestas viejas (Legacy)
                           if (!opt && (item.outcome === 'yes' || item.outcome === 'no')) {
                             displayOutcome = item.outcome === 'yes' ? 'SÍ' : 'NO';
                             optColor = item.outcome === 'yes' ? '#22c55e' : '#ef4444';
@@ -1185,29 +1185,35 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
                                 <div className="flex flex-col">
                                   <div className="flex items-center gap-1.5 flex-wrap">
                                     <span className="font-semibold text-sm cursor-pointer hover:text-primary transition-colors text-foreground" onClick={() => openUserProfile(item.user_id, item.profiles?.username || "Usuario")}>{item.profiles?.username || "Usuario"}</span>
-                                    <span className="text-xs text-muted-foreground">compró</span>
-                                    <span className="text-xs font-black uppercase px-1.5 py-0.5 rounded-md" style={{ color: optColor, backgroundColor: `${optColor}15` }}>{displayOutcome || 'Opción'}</span>
+                                    <span className="text-sm font-medium text-muted-foreground">compró</span>
+                                    <span className="text-sm font-bold uppercase" style={{ color: optColor }}>{displayOutcome || 'Opción'}</span>
                                   </div>
                                   {/* INFO DE ACCIONES ESTILO KALSHI */}
-                                  {hasShares && (
-                                    <span className="text-[11px] font-medium text-muted-foreground mt-0.5">
-                                      {Math.round(item.shares).toLocaleString()} acciones (a {Math.round(impliedPrice || 0)}¢)
+                                  {hasShares ? (
+                                    <span className="text-xs font-medium text-muted-foreground mt-0.5">
+                                      {Math.round(item.shares).toLocaleString()} acciones ({Math.round(impliedPrice || 0)}¢)
+                                    </span>
+                                  ) : (
+                                    <span className="text-xs font-medium text-muted-foreground mt-0.5">
+                                      {item.amount.toLocaleString()} pts invertidos
                                     </span>
                                   )}
                                 </div>
                               </div>
-                              <div className="text-right flex flex-col items-end gap-0.5 shrink-0 pl-2">
-                                <div className="flex items-baseline gap-1.5">
-                                  <p className="font-bold text-foreground text-sm">{item.amount.toLocaleString()} pts</p>
-                                </div>
-                                <p className="text-[10px] font-medium text-muted-foreground">{new Date(item.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</p>
+                              <div className="text-right flex flex-col items-end shrink-0 pl-2">
+                                <p className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">
+                                  {new Date(item.created_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })} • {new Date(item.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+                                </p>
                               </div>
                             </div>
                           );
                         } else {
                           // CASHOUT (Ventas)
+                          const hasShares = item.shares && item.shares > 0;
+                          const impliedPrice = hasShares ? (Math.abs(item.amount) / item.shares) * 100 : null;
+
                           return (
-                            <div key={`cashout-${item.id}`} className="flex items-center justify-between p-4 bg-green-500/5 hover:bg-green-500/10 transition-colors border-l-2 border-l-green-500 group">
+                            <div key={`cashout-${item.id}`} className="flex items-center justify-between p-4 bg-muted/5 hover:bg-muted/10 transition-colors border-l-2 border-l-muted group">
                               <div className="flex items-center gap-3">
                                 <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 border border-border/50 bg-background overflow-hidden cursor-pointer" onClick={() => openUserProfile(item.user_id, item.profiles?.username || "Usuario")}>
                                   {item.profiles?.avatar_url ? <img src={item.profiles.avatar_url} alt="av" className="w-full h-full object-cover" /> : <UserIcon className="w-4 h-4 text-muted-foreground opacity-50" />}
@@ -1215,17 +1221,20 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
                                 <div className="flex flex-col">
                                   <div className="flex items-center gap-1.5 flex-wrap">
                                     <span className="font-semibold text-sm cursor-pointer hover:text-primary transition-colors text-foreground" onClick={() => openUserProfile(item.user_id, item.profiles?.username || "Usuario")}>{item.profiles?.username || "Usuario"}</span>
-                                    <span className="text-xs text-muted-foreground">vendió sus acciones</span>
+                                    <span className="text-sm font-medium text-muted-foreground">vendió</span>
+                                    <span className="text-sm font-bold text-muted-foreground">su posición</span>
                                   </div>
-                                  {/* Subtítulo de venta */}
-                                  <span className="text-[11px] font-medium text-muted-foreground mt-0.5">
-                                    {item.description && item.description !== 'Cashout de predicción' ? item.description : 'Liquidación de posición'}
+                                  <span className="text-xs font-medium text-muted-foreground mt-0.5">
+                                    {hasShares
+                                      ? `${Math.round(item.shares).toLocaleString()} acciones (${Math.round(impliedPrice || 0)}¢)`
+                                      : (item.description && item.description !== 'Cashout de predicción' ? item.description : `Liquidación por ${Math.abs(item.amount).toLocaleString()} pts`)}
                                   </span>
                                 </div>
                               </div>
-                              <div className="text-right flex flex-col items-end gap-0.5 shrink-0 pl-2">
-                                <p className="font-bold text-green-600 dark:text-green-500 text-sm">+{Math.abs(item.amount).toLocaleString()} pts</p>
-                                <p className="text-[10px] font-medium text-muted-foreground">{new Date(item.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</p>
+                              <div className="text-right flex flex-col items-end shrink-0 pl-2">
+                                <p className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">
+                                  {new Date(item.created_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })} • {new Date(item.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+                                </p>
                               </div>
                             </div>
                           );
