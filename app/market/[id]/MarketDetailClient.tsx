@@ -98,7 +98,12 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
 
   const fetchUserBets = useCallback(async () => {
     if (!user) return;
-    const { data } = await supabase.from('bets').select('*').eq('market_id', marketId).eq('user_id', user.id);
+    const { data } = await supabase.from('bets')
+      .select('*')
+      .eq('market_id', marketId)
+      .eq('user_id', user.id)
+      .eq('status', 'active');
+
     setUserBets(data || []);
   }, [user, marketId, supabase]);
 
@@ -128,7 +133,25 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
         }
         historyMap.get(ts)[h.option_id] = Number(h.percentage);
       });
+
       formattedHistory = Array.from(historyMap.values()).sort((a, b) => a.timestamp - b.timestamp);
+
+      if (optionsData) {
+        let lastKnownValues: Record<string, number> = {};
+        formattedHistory = formattedHistory.map(point => {
+          const newPoint = { ...point };
+          optionsData.forEach(opt => {
+            if (newPoint[opt.id] !== undefined) {
+              lastKnownValues[opt.id] = newPoint[opt.id];
+            } else if (lastKnownValues[opt.id] !== undefined) {
+              newPoint[opt.id] = lastKnownValues[opt.id];
+            } else {
+              newPoint[opt.id] = null as any;
+            }
+          });
+          return newPoint;
+        });
+      }
 
     } else if (oldHistoryData && oldHistoryData.length > 0 && optionsData && optionsData.length === 2) {
       const yesOpt = optionsData.find(o => o.option_name.toLowerCase().includes('s'));
@@ -277,7 +300,6 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
       const optionName = options.find(o => o.id === selectedOptionId)?.option_name || "la opción";
       const directionText = selectedDirection === 'yes' ? 'a favor de' : 'en contra de';
 
-      // Registrar la transacción
       await supabase.from("transactions").insert({
         user_id: user.id,
         amount: -numericAmount,
@@ -286,7 +308,6 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
         market_id: marketId,
       });
 
-      // Disparar la notificación
       await supabase.from("notifications").insert({
         user_id: user.id,
         title: "Apuesta confirmada",
@@ -296,7 +317,6 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
         market_id: marketId,
       });
 
-      // Actualizar el historial de precios del mercado
       const { data: updatedOptions } = await supabase.from("market_options").select("*").eq("market_id", marketId);
       if (updatedOptions && updatedOptions.length > 0) {
         const newTotalVotes = updatedOptions.reduce((acc, opt) => acc + Number(opt.total_votes || 0), 0);
@@ -319,7 +339,7 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
       setBetAmount("");
       fetchUserAndProfile();
       fetchUserBets();
-      fetchData(); // Refrescar los datos del gráfico y el mercado
+      fetchData();
     }
   };
 
@@ -331,8 +351,14 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
       toast({ title: "Error al vender", description: error || "Hubo un problema", variant: "destructive" });
     } else {
       toast({ title: "¡Venta exitosa!", description: `Tus ganancias de ${cashoutValue?.toLocaleString()} pts ya están en tu cuenta.` });
-      fetchUserAndProfile();
-      fetchUserBets();
+
+      // FIX: Al vender exitosamente, aseguramos recargar todo.
+      await fetchUserAndProfile();
+      await fetchUserBets();
+      await fetchData();
+
+      // Si queremos, volvemos a la tab de compras
+      // setTradeTab("buy");
     }
     setSellingBetId(null);
   };
@@ -425,11 +451,14 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
   };
 
   const marketPositionSummary = useMemo(() => {
-    if (!userBets || userBets.length === 0) return null;
+    // FIX: Doble validación para solo contar posiciones con inversión real
+    const activeBets = userBets.filter(b => b.amount && b.amount > 0);
+    if (!activeBets || activeBets.length === 0) return null;
+
     let totalInvested = 0;
     let totalCurrentValue = 0;
 
-    userBets.forEach(bet => {
+    activeBets.forEach(bet => {
       const opt = options.find(o => o.id === bet.outcome);
       if (opt) {
         totalInvested += bet.amount;
@@ -443,12 +472,11 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
     return { totalInvested, totalCurrentValue, pnl, pnlPct };
   }, [userBets, options, calculateRealCashout]);
 
-  // CÁLCULO DE LAS BALLENAS (TOP HOLDERS)
   const topHolders = useMemo(() => {
     const holders: Record<string, { userId: string, username: string, avatarUrl: string | null, invested: number }> = {};
 
     activityFeed.forEach(item => {
-      if (item.activityType === 'bet') {
+      if (item.activityType === 'bet' && item.status !== 'sold') {
         if (!holders[item.user_id]) {
           holders[item.user_id] = {
             userId: item.user_id,
@@ -757,7 +785,7 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
                       {options.map((opt) => (
                         <Line
                           key={opt.id}
-                          type="stepAfter"
+                          type="monotone" // FIX GRÁFICO
                           connectNulls={true}
                           dataKey={opt.id}
                           stroke={opt.color}
@@ -1209,8 +1237,36 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
                           );
                         } else {
                           // CASHOUT (Ventas)
-                          const hasShares = item.shares && item.shares > 0;
-                          const impliedPrice = hasShares ? (Math.abs(item.amount) / item.shares) * 100 : null;
+                          let sharesSold = null;
+                          let priceSold = null;
+                          let soldOptionName = null;
+                          let soldDirection = null;
+
+                          if (item.description) {
+                            const matchShares = item.description.match(/Venta de ([\d.,]+) acciones/i);
+                            const matchPrice = item.description.match(/a ([\d.,]+)¢/i);
+                            const matchOption = item.description.match(/\((.*?)\)/);
+
+                            if (matchShares) sharesSold = parseFloat(matchShares[1].replace(/,/g, ''));
+                            if (matchPrice) priceSold = parseFloat(matchPrice[1].replace(/,/g, ''));
+                            if (matchOption) {
+                              const optText = matchOption[1];
+                              if (optText.toLowerCase().startsWith('no a ')) {
+                                soldDirection = 'no';
+                                soldOptionName = optText.substring(5);
+                              } else if (optText.toLowerCase().startsWith('si a ') || optText.toLowerCase().startsWith('sí a ')) {
+                                soldDirection = 'yes';
+                                soldOptionName = optText.substring(5);
+                              } else {
+                                soldOptionName = optText;
+                              }
+                            }
+                          }
+
+                          if (!sharesSold && item.shares && item.shares > 0) {
+                            sharesSold = item.shares;
+                            priceSold = (Math.abs(item.amount) / item.shares) * 100;
+                          }
 
                           return (
                             <div key={`cashout-${item.id}`} className="flex items-center justify-between p-4 bg-muted/5 hover:bg-muted/10 transition-colors border-l-2 border-l-muted group">
@@ -1222,11 +1278,17 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
                                   <div className="flex items-center gap-1.5 flex-wrap">
                                     <span className="font-semibold text-sm cursor-pointer hover:text-primary transition-colors text-foreground" onClick={() => openUserProfile(item.user_id, item.profiles?.username || "Usuario")}>{item.profiles?.username || "Usuario"}</span>
                                     <span className="text-sm font-medium text-muted-foreground">vendió</span>
-                                    <span className="text-sm font-bold text-muted-foreground">su posición</span>
+                                    {soldOptionName ? (
+                                      <span className="text-sm font-bold uppercase" style={{ color: soldDirection === 'no' ? '#ef4444' : '#22c55e' }}>
+                                        {soldDirection === 'no' ? `No a ${soldOptionName}` : soldOptionName}
+                                      </span>
+                                    ) : (
+                                      <span className="text-sm font-bold text-muted-foreground">su posición</span>
+                                    )}
                                   </div>
                                   <span className="text-xs font-medium text-muted-foreground mt-0.5">
-                                    {hasShares
-                                      ? `${Math.round(item.shares).toLocaleString()} acciones (${Math.round(impliedPrice || 0)}¢)`
+                                    {sharesSold && priceSold
+                                      ? `${Math.round(sharesSold).toLocaleString()} acciones (${Math.round(priceSold)}¢)`
                                       : (item.description && item.description !== 'Cashout de predicción' ? item.description : `Liquidación por ${Math.abs(item.amount).toLocaleString()} pts`)}
                                   </span>
                                 </div>
