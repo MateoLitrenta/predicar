@@ -58,13 +58,13 @@ export type BetWithMarket = {
   amount: number;
   outcome: string;
   created_at?: string;
-  markets?: { 
-    id: string; 
-    title: string; 
-    status: string; 
-    end_date?: string; 
+  markets?: {
+    id: string;
+    title: string;
+    status: string;
+    end_date?: string;
     winning_outcome?: string | null;
-    total_volume?: number; 
+    total_volume?: number;
   } | null;
   market?: { id: string; title: string; status: string; end_date?: string; winning_outcome?: string | null; total_volume?: number; } | null;
   option_details?: {
@@ -169,12 +169,12 @@ export async function updateMarket(marketId: string, params: { title: string; de
   const categoryNormalized = params.category.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
   const { error } = await supabase.from("markets").update({
-      title: params.title,
-      description: params.description || null,
-      category: categoryNormalized,
-      end_date: params.end_date,
-      image_url: params.image_url,
-    }).eq("id", marketId);
+    title: params.title,
+    description: params.description || null,
+    category: categoryNormalized,
+    end_date: params.end_date,
+    image_url: params.image_url,
+  }).eq("id", marketId);
 
   if (error) return { ok: false, error: error.message };
   return { ok: true, error: null };
@@ -216,7 +216,7 @@ export async function createMarket(params: { title: string; description: string 
 export async function createAdminMarket(params: { title: string; description: string | null; category: string; end_date: string; image_url?: string | null; options?: string[]; }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  
+
   if (!user) return { ok: false, error: "No autorizado" };
 
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
@@ -228,7 +228,7 @@ export async function createAdminMarket(params: { title: string; description: st
     title: params.title,
     description: params.description || null,
     category: categoryNormalized,
-    status: "active", 
+    status: "active",
     end_date: params.end_date,
     image_url: params.image_url || null,
     created_by: user.id,
@@ -354,7 +354,7 @@ export async function updateProfileSettings(username: string, avatar_url: string
 export async function sellBet(betId: string): Promise<{ ok: boolean; error: string | null; cashoutValue?: number }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  
+
   if (!user) return { ok: false, error: "No autenticado" };
 
   const { data: cashoutValue, error } = await supabase.rpc("realizar_cashout", { p_bet_id: betId });
@@ -365,6 +365,34 @@ export async function sellBet(betId: string): Promise<{ ok: boolean; error: stri
 
   // DISPARADOR DE NOTIFICACIÓN: Venta de acciones
   await createNotification(user.id, "💰 Venta Ejecutada", `Has liquidado tu posición exitosamente por +${Number(cashoutValue).toLocaleString()} pts.`, "cashout");
+
+  return { ok: true, error: null, cashoutValue };
+}
+
+export async function sellPartialShares(
+  marketId: string,
+  outcome: string,
+  direction: string,
+  sharesToSell: number
+): Promise<{ ok: boolean; error: string | null; cashoutValue?: number }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) return { ok: false, error: "No autenticado" };
+
+  const { data: cashoutValue, error } = await supabase.rpc("vender_acciones_parciales", {
+    p_user_id: user.id,
+    p_market_id: marketId,
+    p_outcome: outcome,
+    p_direction: direction,
+    p_shares_to_sell: sharesToSell
+  });
+
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+
+  await createNotification(user.id, "💰 Acciones Liquidadas", `Has vendido ${sharesToSell.toLocaleString()} acciones por +${Number(cashoutValue).toLocaleString()} pts.`, "cashout");
 
   return { ok: true, error: null, cashoutValue };
 }

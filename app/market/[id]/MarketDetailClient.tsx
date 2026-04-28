@@ -18,8 +18,8 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { createClient } from "@/lib/supabase/client";
-import { sellBet } from "@/lib/actions";
-import { Loader2, ArrowLeft, Clock, Coins, X, User as UserIcon, MessageSquare, Reply, ChevronDown, ChevronUp, Trash2, ArrowDownRight, ArrowUpRight, TrendingUp, LineChart as LineChartIcon, Share2, Twitter, MessageCircle, Copy, Check, Lock, CheckCircle2, Trophy, Scale, AlertCircle, Wallet } from "lucide-react";
+import { sellBet, sellPartialShares } from "@/lib/actions";
+import { Loader2, ArrowLeft, Clock, Coins, X, User as UserIcon, MessageSquare, Reply, ChevronDown, ChevronUp, Trash2, ArrowDownRight, ArrowUpRight, TrendingUp, LineChart as LineChartIcon, Share2, Twitter, MessageCircle, Copy, Check, Lock, CheckCircle2, Trophy, Scale, AlertCircle, Wallet, Layers } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
@@ -57,7 +57,11 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
   const [isPlacingBet, setIsPlacingBet] = useState(false);
 
   const [userBets, setUserBets] = useState<any[]>([]);
-  const [sellingBetId, setSellingBetId] = useState<string | null>(null);
+  const [isSelling, setIsSelling] = useState(false);
+
+  // Nuevos estados para la venta consolidada
+  const [selectedSellPosition, setSelectedSellPosition] = useState<string | null>(null);
+  const [sellSharesInput, setSellSharesInput] = useState<string>("");
 
   const [newComment, setNewComment] = useState("");
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
@@ -242,16 +246,17 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
     return Math.max(0.01, Math.min(0.99, price));
   };
 
-  const calculateRealCashout = (bet: any, opt: any) => {
-    const shares = Number(bet.shares || 0);
-    if (shares <= 0) return Math.round(bet.amount * 0.95);
+  // Función para calcular cashout de acciones parciales
+  const calculatePartialCashout = (optId: string, direction: string, sharesToSell: number) => {
+    const opt = options.find(o => o.id === optId);
+    // Si no encontramos la opción (puede ser legacy 'yes'/'no'), devolvemos 0 para que la vista dependa de otros factores si existieran
+    if (!opt || sharesToSell <= 0) return 0;
 
-    const direction = bet.direction || 'yes';
     const optionVotes = Number(opt.total_votes || 0);
     const totalOptions = options.length || 2;
 
     const startPriceYes = (optionVotes + 100.0) / (realTotalVotes + (totalOptions * 100.0));
-    const estPayout = shares * (direction === 'yes' ? startPriceYes : (1 - startPriceYes));
+    const estPayout = sharesToSell * (direction === 'yes' ? startPriceYes : (1 - startPriceYes));
 
     let endPriceYes = 0;
     if (direction === 'yes') {
@@ -264,7 +269,7 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
     avgPriceYes = Math.max(0.01, Math.min(0.99, avgPriceYes));
 
     const currentPrice = direction === 'yes' ? avgPriceYes : (1 - avgPriceYes);
-    return Math.round(shares * currentPrice);
+    return Math.round(sharesToSell * currentPrice);
   };
 
   const handlePlaceBet = async () => {
@@ -343,24 +348,33 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
     }
   };
 
-  const handleSellBet = async (betId: string) => {
-    setSellingBetId(betId);
-    const { ok, error, cashoutValue } = await sellBet(betId);
+  // Función de Ejecución de Ventas Parciales
+  const executeSellShares = async () => {
+    if (!selectedSellPosition || !sellSharesInput) return;
+
+    const [optId, dir] = selectedSellPosition.split('|');
+    const sharesToSell = parseFloat(sellSharesInput);
+
+    if (isNaN(sharesToSell) || sharesToSell <= 0) {
+      toast({ title: "Cantidad inválida", variant: "destructive" });
+      return;
+    }
+
+    setIsSelling(true);
+    // Llamamos a la nueva función de Next.js
+    const { ok, error, cashoutValue } = await sellPartialShares(marketId, optId, dir, sharesToSell);
+    setIsSelling(false);
 
     if (!ok) {
       toast({ title: "Error al vender", description: error || "Hubo un problema", variant: "destructive" });
     } else {
-      toast({ title: "¡Venta exitosa!", description: `Tus ganancias de ${cashoutValue?.toLocaleString()} pts ya están en tu cuenta.` });
-
-      // FIX: Al vender exitosamente, aseguramos recargar todo.
-      await fetchUserAndProfile();
-      await fetchUserBets();
-      await fetchData();
-
-      // Si queremos, volvemos a la tab de compras
-      // setTradeTab("buy");
+      toast({ title: "¡Venta exitosa!", description: `Recibiste +${cashoutValue?.toLocaleString()} pts.` });
+      setSellSharesInput("");
+      setSelectedSellPosition(null);
+      fetchUserAndProfile();
+      fetchUserBets();
+      fetchData();
     }
-    setSellingBetId(null);
   };
 
   const handleAddComment = async (e: React.FormEvent) => {
@@ -390,6 +404,25 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
   };
 
   const toggleThread = (commentId: string) => { setExpandedThreads(prev => ({ ...prev, [commentId]: !prev[commentId] })); };
+
+  // AGRUPADOR: Creamos posiciones consolidadas a partir de apuestas individuales
+  const consolidatedPositions = useMemo(() => {
+    const activeBets = userBets.filter(b => b.amount > 0 && b.shares > 0);
+    if (activeBets.length === 0) return [];
+
+    const positions: Record<string, { outcome: string; direction: string; totalShares: number; totalInvested: number }> = {};
+
+    activeBets.forEach(bet => {
+      const key = `${bet.outcome}|${bet.direction}`;
+      if (!positions[key]) {
+        positions[key] = { outcome: bet.outcome, direction: bet.direction || 'yes', totalShares: 0, totalInvested: 0 };
+      }
+      positions[key].totalShares += Number(bet.shares);
+      positions[key].totalInvested += Number(bet.amount);
+    });
+
+    return Object.values(positions);
+  }, [userBets]);
 
   const filteredHistory = useMemo(() => {
     if (!history || history.length === 0) return [];
@@ -451,26 +484,20 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
   };
 
   const marketPositionSummary = useMemo(() => {
-    // FIX: Doble validación para solo contar posiciones con inversión real
-    const activeBets = userBets.filter(b => b.amount && b.amount > 0);
-    if (!activeBets || activeBets.length === 0) return null;
-
+    if (consolidatedPositions.length === 0) return null;
     let totalInvested = 0;
     let totalCurrentValue = 0;
 
-    activeBets.forEach(bet => {
-      const opt = options.find(o => o.id === bet.outcome);
-      if (opt) {
-        totalInvested += bet.amount;
-        totalCurrentValue += calculateRealCashout(bet, opt);
-      }
+    consolidatedPositions.forEach(pos => {
+      totalInvested += pos.totalInvested;
+      totalCurrentValue += calculatePartialCashout(pos.outcome, pos.direction, pos.totalShares);
     });
 
     if (totalInvested === 0) return null;
     const pnl = totalCurrentValue - totalInvested;
     const pnlPct = (pnl / totalInvested) * 100;
     return { totalInvested, totalCurrentValue, pnl, pnlPct };
-  }, [userBets, options, calculateRealCashout]);
+  }, [consolidatedPositions, options, realTotalVotes]);
 
   const topHolders = useMemo(() => {
     const holders: Record<string, { userId: string, username: string, avatarUrl: string | null, invested: number }> = {};
@@ -785,7 +812,7 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
                       {options.map((opt) => (
                         <Line
                           key={opt.id}
-                          type="monotone" // FIX GRÁFICO
+                          type="monotone"
                           connectNulls={true}
                           dataKey={opt.id}
                           stroke={opt.color}
@@ -1073,73 +1100,97 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
                     </div>
                   </TabsContent>
 
+                  {/* NUEVA UI DE VENTAS CONSOLIDADAS */}
                   <TabsContent value="sell" className="p-2 sm:p-3 mt-0">
                     {!user ? (
-                      <div className="text-center py-8">
-                        <p className="text-muted-foreground text-sm mb-4">Iniciá sesión para ver tu portfolio.</p>
-                        <Button onClick={() => setIsAuthModalOpen(true)}>Ingresar</Button>
-                      </div>
-                    ) : userBets.length === 0 ? (
-                      <div className="p-6 text-center border-2 border-dashed border-border/50 rounded-xl bg-muted/10">
-                        <Coins className="w-8 h-8 mx-auto mb-2 text-muted-foreground opacity-50" />
-                        <p className="text-sm font-medium text-muted-foreground">No tenés posiciones activas en este mercado.</p>
-                      </div>
+                      <div className="text-center py-8"><p className="text-muted-foreground text-sm mb-4">Iniciá sesión para ver tu portfolio.</p><Button onClick={() => setIsAuthModalOpen(true)}>Ingresar</Button></div>
+                    ) : consolidatedPositions.length === 0 ? (
+                      <div className="p-6 text-center border-2 border-dashed border-border/50 rounded-xl bg-muted/10"><Layers className="w-8 h-8 mx-auto mb-2 text-muted-foreground opacity-50" /><p className="text-sm font-medium text-muted-foreground">No tenés posiciones activas en este mercado.</p></div>
                     ) : (
-                      <div className="space-y-4 max-h-[400px] overflow-y-auto pr-1">
-                        {userBets.map(bet => {
-                          const opt = options.find(o => o.id === bet.outcome);
+                      <div className="space-y-4">
+                        {!selectedSellPosition ? (
+                          // 1. Mostrar Lista Consolidada
+                          <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1.5"><Layers className="w-3 h-3" /> Selecciona qué liquidar</p>
+                            {consolidatedPositions.map(pos => {
+                              const opt = options.find(o => o.id === pos.outcome);
+                              const cashoutVal = calculatePartialCashout(pos.outcome, pos.direction, pos.totalShares);
+                              const pnl = cashoutVal - pos.totalInvested;
+                              const pnlPct = (pnl / pos.totalInvested) * 100;
+                              const isRed = pos.direction === 'no' || (isBinaryYesNo && opt?.option_name.toLowerCase() === 'no');
 
-                          const cashoutVal = opt ? calculateRealCashout(bet, opt) : Math.round(bet.amount * 0.95);
-                          const pnl = cashoutVal - bet.amount;
-                          const pnlPct = (pnl / bet.amount) * 100;
-
-                          return (
-                            <div key={bet.id} className={cn("p-4 rounded-xl border border-border/50 bg-muted/10 space-y-3", isMarketClosed && "opacity-75")}>
-                              <div className="flex justify-between items-start">
-                                <div>
-                                  <p className="text-[10px] uppercase font-bold text-muted-foreground">Tu posición</p>
-                                  <p className="font-bold text-foreground">
-                                    {isBinaryYesNo ? (
-                                      <span className={cn("mr-1", opt?.option_name.toLowerCase() === 'no' ? "text-red-600 dark:text-red-500" : "text-green-600 dark:text-green-500")}>
-                                        {opt?.option_name}
-                                      </span>
-                                    ) : (
-                                      <>
-                                        <span className={cn("mr-1", bet.direction === 'no' ? "text-red-600 dark:text-red-500" : "text-green-600 dark:text-green-500")}>
-                                          {bet.direction === 'no' ? 'No' : 'Sí'}
-                                        </span>
-                                        a {opt?.option_name || "Opción"}
-                                      </>
-                                    )}
-                                  </p>
+                              return (
+                                <div key={`${pos.outcome}-${pos.direction}`} className={cn("p-4 rounded-xl border border-border/50 bg-card hover:bg-muted/30 cursor-pointer transition-colors", isMarketClosed && "opacity-75")} onClick={() => { if (!isMarketClosed) setSelectedSellPosition(`${pos.outcome}|${pos.direction}`) }}>
+                                  <div className="flex justify-between items-start mb-3">
+                                    <div>
+                                      <p className="font-bold text-foreground">
+                                        {isBinaryYesNo ? (
+                                          <span className={cn("mr-1", isRed ? "text-red-600 dark:text-red-500" : "text-green-600 dark:text-green-500")}>{opt?.option_name}</span>
+                                        ) : (
+                                          <><span className={cn("mr-1", isRed ? "text-red-600 dark:text-red-500" : "text-green-600 dark:text-green-500")}>{pos.direction === 'no' ? 'No' : 'Sí'}</span> a {opt?.option_name || "Opción"}</>
+                                        )}
+                                      </p>
+                                      <p className="text-xs text-muted-foreground font-medium mt-0.5">{Math.round(pos.totalShares).toLocaleString()} acciones</p>
+                                    </div>
+                                    <Badge variant="outline" className={cn("font-bold border", pnl >= 0 ? "bg-green-500/10 text-green-600 dark:text-green-500 border-green-500/30" : "bg-red-500/10 text-red-600 dark:text-red-500 border-red-500/30")}>{pnl >= 0 ? "+" : ""}{pnlPct.toFixed(1)}%</Badge>
+                                  </div>
+                                  <div className="flex justify-between items-center text-sm pt-2 border-t border-border/50">
+                                    <span className="text-muted-foreground">Valor Actual:</span>
+                                    <span className="font-bold text-primary">{cashoutVal.toLocaleString()} pts</span>
+                                  </div>
                                 </div>
-                                <Badge variant="outline" className={cn("font-bold border", pnl >= 0 ? "bg-green-500/10 text-green-600 dark:text-green-500 border-green-500/30" : "bg-red-500/10 text-red-600 dark:text-red-500 border-red-500/30")}>
-                                  {pnl >= 0 ? "+" : ""}{pnlPct.toFixed(1)}%
-                                </Badge>
-                              </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          // 2. Interfaz de Venta Parcial para la opción seleccionada
+                          <div className="space-y-4 animate-in slide-in-from-right-4">
+                            {(() => {
+                              const [optId, dir] = selectedSellPosition.split('|');
+                              const opt = options.find(o => o.id === optId);
+                              const pos = consolidatedPositions.find(p => p.outcome === optId && p.direction === dir);
+                              if (!pos) return null;
 
-                              <div className="grid grid-cols-2 gap-2 text-sm bg-background p-2 rounded-lg border border-border/50">
-                                <div>
-                                  <p className="text-[10px] text-muted-foreground">Inversión</p>
-                                  <p className="font-semibold">{bet.amount} pts</p>
-                                </div>
-                                <div className="text-right">
-                                  <p className="text-[10px] text-muted-foreground">Valor Actual</p>
-                                  <p className="font-bold text-primary">{cashoutVal} pts</p>
-                                </div>
-                              </div>
+                              const sharesToSell = parseFloat(sellSharesInput) || 0;
+                              const isValidSell = sharesToSell > 0 && sharesToSell <= pos.totalShares;
+                              const expectedReturn = isValidSell ? calculatePartialCashout(optId, dir, sharesToSell) : 0;
+                              const isRed = dir === 'no' || (isBinaryYesNo && opt?.option_name.toLowerCase() === 'no');
 
-                              <Button
-                                size="sm"
-                                className="w-full h-10 font-bold bg-secondary hover:bg-secondary/80 text-secondary-foreground"
-                                onClick={() => handleSellBet(bet.id)}
-                                disabled={sellingBetId === bet.id || isMarketClosed}
-                              >
-                                {isMarketClosed ? <><Lock className="w-4 h-4 mr-2" /> Bloqueado</> : sellingBetId === bet.id ? <Loader2 className="w-4 h-4 animate-spin" /> : `Liquidar por ${cashoutVal} pts`}
-                              </Button>
-                            </div>
-                          );
-                        })}
+                              return (
+                                <>
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <button onClick={() => { setSelectedSellPosition(null); setSellSharesInput(""); }} className="p-1 hover:bg-muted rounded text-muted-foreground"><ArrowLeft className="w-4 h-4" /></button>
+                                    <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Configurar Venta</p>
+                                  </div>
+
+                                  <div className={cn("p-4 rounded-xl border", !isRed ? 'border-green-500/30 bg-green-500/5' : 'border-red-500/30 bg-red-500/5')}>
+                                    <p className="text-sm font-black text-foreground">{isBinaryYesNo ? opt?.option_name : `${dir === 'yes' ? 'Sí' : 'No'} a ${opt?.option_name}`}</p>
+                                    <p className="text-xs font-medium text-muted-foreground mt-1">Disponibles: <span className="font-bold text-foreground">{Math.round(pos.totalShares).toLocaleString()} acciones</span></p>
+                                  </div>
+
+                                  <div>
+                                    <div className="flex justify-between items-center mb-1.5">
+                                      <Label className="text-muted-foreground">Acciones a liquidar</Label>
+                                      <button onClick={() => setSellSharesInput(pos.totalShares.toString())} className="text-[10px] font-bold uppercase tracking-wider text-primary hover:text-primary/80 transition-colors bg-primary/10 px-2 py-0.5 rounded-full">MAX</button>
+                                    </div>
+                                    <Input type="number" placeholder="0" value={sellSharesInput} onChange={(e) => setSellSharesInput(e.target.value)} max={pos.totalShares} className="h-14 text-xl font-bold bg-muted/20 border-border/50 focus-visible:ring-primary/50" />
+                                  </div>
+
+                                  <div className="p-4 rounded-xl bg-background border border-border/50">
+                                    <div className="flex justify-between items-center w-full text-base">
+                                      <span className="font-bold text-foreground whitespace-nowrap mr-2">Retorno Estimado</span>
+                                      <span className="font-black text-primary">{expectedReturn.toLocaleString()} pts</span>
+                                    </div>
+                                  </div>
+
+                                  <Button size="lg" className="w-full h-12 font-bold bg-secondary hover:bg-secondary/80 text-secondary-foreground mt-2" onClick={executeSellShares} disabled={!isValidSell || isSelling || isMarketClosed}>
+                                    {isMarketClosed ? <><Lock className="w-4 h-4 mr-2" /> Bloqueado</> : isSelling ? <Loader2 className="w-4 h-4 animate-spin" /> : isValidSell ? `Liquidar por ${expectedReturn} pts` : "Ingresar cantidad"}
+                                  </Button>
+                                </>
+                              );
+                            })()}
+                          </div>
+                        )}
                       </div>
                     )}
                   </TabsContent>
@@ -1147,7 +1198,6 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
               )}
             </div>
 
-            {/* LAS BALLENAS VAN ABAJO DEL PANEL DE TRADING EN DESKTOP */}
             <div className="hidden lg:block mt-6">
               {TopHoldersBlock}
             </div>
