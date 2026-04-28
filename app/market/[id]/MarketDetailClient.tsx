@@ -30,6 +30,38 @@ interface MarketDetailClientProps {
 
 type ChartTimeframe = '1H' | '6H' | '1D' | '1W' | '1M' | '6M' | '1Y' | 'ALL';
 
+// --- CUSTOM TOOLTIP OPTIMIZADO (Siempre muestra % y todas las posiciones) ---
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    // Ordenar de mayor a menor probabilidad visualmente en el tooltip
+    const sortedPayload = [...payload].sort((a, b) => b.value - a.value);
+
+    return (
+      <div className="bg-background/95 border border-border/50 p-3.5 rounded-xl shadow-2xl backdrop-blur-md min-w-[160px]">
+        <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-3 border-b border-border/50 pb-2">
+          {new Date(label).toLocaleString('es-AR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+        </p>
+        <div className="space-y-2.5">
+          {sortedPayload.map((entry: any, index: number) => (
+            <div key={index} className="flex items-center justify-between gap-6">
+              <div className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full shadow-sm" style={{ backgroundColor: entry.color }} />
+                <span className="text-sm font-semibold text-foreground truncate max-w-[120px]">
+                  {entry.name}
+                </span>
+              </div>
+              <span className="text-base font-black" style={{ color: entry.color }}>
+                {Math.round(entry.value)}%
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
+
 export default function MarketDetailClient({ marketId }: MarketDetailClientProps) {
   const router = useRouter();
   const supabase = createClient();
@@ -59,7 +91,6 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
   const [userBets, setUserBets] = useState<any[]>([]);
   const [isSelling, setIsSelling] = useState(false);
 
-  // Nuevos estados para la venta consolidada
   const [selectedSellPosition, setSelectedSellPosition] = useState<string | null>(null);
   const [sellSharesInput, setSellSharesInput] = useState<string>("");
 
@@ -150,7 +181,7 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
             } else if (lastKnownValues[opt.id] !== undefined) {
               newPoint[opt.id] = lastKnownValues[opt.id];
             } else {
-              newPoint[opt.id] = null as any;
+              newPoint[opt.id] = 0; // Valor por defecto si nunca existió
             }
           });
           return newPoint;
@@ -246,10 +277,8 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
     return Math.max(0.01, Math.min(0.99, price));
   };
 
-  // Función para calcular cashout de acciones parciales
   const calculatePartialCashout = (optId: string, direction: string, sharesToSell: number) => {
     const opt = options.find(o => o.id === optId);
-    // Si no encontramos la opción (puede ser legacy 'yes'/'no'), devolvemos 0 para que la vista dependa de otros factores si existieran
     if (!opt || sharesToSell <= 0) return 0;
 
     const optionVotes = Number(opt.total_votes || 0);
@@ -348,7 +377,6 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
     }
   };
 
-  // Función de Ejecución de Ventas Parciales
   const executeSellShares = async () => {
     if (!selectedSellPosition || !sellSharesInput) return;
 
@@ -361,7 +389,6 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
     }
 
     setIsSelling(true);
-    // Llamamos a la nueva función de Next.js
     const { ok, error, cashoutValue } = await sellPartialShares(marketId, optId, dir, sharesToSell);
     setIsSelling(false);
 
@@ -405,7 +432,6 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
 
   const toggleThread = (commentId: string) => { setExpandedThreads(prev => ({ ...prev, [commentId]: !prev[commentId] })); };
 
-  // AGRUPADOR: Creamos posiciones consolidadas a partir de apuestas individuales
   const consolidatedPositions = useMemo(() => {
     const activeBets = userBets.filter(b => b.amount > 0 && b.shares > 0);
     if (activeBets.length === 0) return [];
@@ -424,6 +450,8 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
     return Object.values(positions);
   }, [userBets]);
 
+  // --- MOTOR DE INYECCIÓN DE NODOS PARA EL GRÁFICO ---
+  // Esto soluciona el "punto ciego" del tooltip y permite usar líneas rectas continuas.
   const filteredHistory = useMemo(() => {
     if (!history || history.length === 0) return [];
 
@@ -457,15 +485,37 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
       dataInTimeframe.push({ ...dataInTimeframe[dataInTimeframe.length - 1], timestamp: now });
     }
 
-    return dataInTimeframe;
+    if (dataInTimeframe.length < 2) return dataInTimeframe;
+
+    // HACK UX: Generar 100 puntos invisibles para asegurar que el Tooltip siempre lea datos
+    const minTime = dataInTimeframe[0].timestamp;
+    const maxTime = dataInTimeframe[dataInTimeframe.length - 1].timestamp;
+    const step = (maxTime - minTime) / 100;
+
+    const finalData = [...dataInTimeframe];
+
+    if (step > 0) {
+      let dataIndex = 0;
+      for (let i = 1; i < 100; i++) {
+        const tickTime = minTime + (step * i);
+        while (dataIndex < dataInTimeframe.length - 1 && dataInTimeframe[dataIndex + 1].timestamp <= tickTime) {
+          dataIndex++;
+        }
+        finalData.push({
+          ...dataInTimeframe[dataIndex],
+          timestamp: tickTime
+        });
+      }
+    }
+
+    // Ordenar cronológicamente para que Recharts no colapse
+    return finalData.sort((a, b) => a.timestamp - b.timestamp);
   }, [history, chartTimeframe, market]);
 
-  const dynamicStrokeWidth = (chartTimeframe === 'ALL' || chartTimeframe === '1Y' || chartTimeframe === '6M') ? 1.2 : 2;
+  const dynamicStrokeWidth = (chartTimeframe === 'ALL' || chartTimeframe === '1Y' || chartTimeframe === '6M') ? 1.5 : 2.5;
 
   const axisTextColor = isDarkMode ? '#a1a1aa' : '#64748b';
   const axisLineColor = isDarkMode ? '#334155' : '#e2e8f0';
-  const tooltipBgColor = isDarkMode ? '#0f172a' : '#ffffff';
-  const tooltipTextColor = isDarkMode ? '#f8fafc' : '#0f172a';
 
   const formatXAxis = (tick: number) => {
     const date = new Date(tick);
@@ -476,11 +526,6 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
       return date.toLocaleDateString('es-AR', { day: '2-digit', month: 'short' });
     }
     return date.toLocaleDateString('es-AR', { month: 'short', year: '2-digit' });
-  };
-
-  const customTooltipLabelFormatter = (label: number) => {
-    const date = new Date(label);
-    return date.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
   };
 
   const marketPositionSummary = useMemo(() => {
@@ -682,7 +727,6 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
     </div>
   );
 
-  // BLOQUE DE BALLENAS (TOP HOLDERS)
   const TopHoldersBlock = (
     <div className="mt-6 rounded-2xl border border-border/50 bg-card shadow-sm overflow-hidden">
       <div className="p-4 border-b border-border/20 bg-muted/10 flex items-center gap-2">
@@ -802,26 +846,23 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
                         width={60}
                         orientation="right"
                       />
+
                       <Tooltip
-                        labelFormatter={customTooltipLabelFormatter}
-                        contentStyle={{ backgroundColor: tooltipBgColor, borderRadius: '12px', border: `1px solid ${axisLineColor}`, boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', color: tooltipTextColor, fontWeight: 'bold', padding: '12px' }}
-                        itemStyle={{ fontSize: '14px', fontWeight: 'bold' }}
-                        labelStyle={{ color: axisTextColor, marginBottom: '4px', fontSize: '11px', textTransform: 'uppercase' }}
-                        cursor={{ stroke: axisTextColor, strokeWidth: 1, strokeDasharray: '4 4' }}
+                        content={<CustomTooltip />}
+                        cursor={{ stroke: axisTextColor, strokeWidth: 1.5, strokeDasharray: '4 4', opacity: 0.5 }}
                       />
+
                       {options.map((opt) => (
                         <Line
                           key={opt.id}
-                          type="monotone"
+                          type="linear" // <-- LINEAS RECTAS CONECTANDO PUNTOS ESTILO POLYMARKET
                           connectNulls={true}
                           dataKey={opt.id}
                           stroke={opt.color}
                           strokeWidth={dynamicStrokeWidth}
                           strokeOpacity={1}
-                          strokeLinecap="butt"
-                          strokeLinejoin="miter"
                           dot={false}
-                          activeDot={{ r: 4, strokeWidth: 0, fill: opt.color }}
+                          activeDot={{ r: 5, strokeWidth: 2, stroke: '#1e1e1e', fill: opt.color }}
                           name={opt.option_name}
                           isAnimationActive={false}
                         />
