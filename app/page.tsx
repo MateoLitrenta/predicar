@@ -26,8 +26,8 @@ interface Market {
   category: string;
   total_volume: number;
   end_date: string;
-  status: string; 
-  winning_outcome?: string | null; 
+  status: string;
+  winning_outcome?: string | null;
   created_at: string;
   updated_at: string;
   trending?: "up" | "down";
@@ -106,7 +106,10 @@ export default function PredictionMarketDashboard() {
   }, [supabase.auth, fetchUserProfile]);
 
   const fetchMarkets = useCallback(async () => {
-    setIsLoadingMarkets(true);
+    // Si ya hay mercados cargados, no ponemos isLoading = true para evitar el parpadeo en las actualizaciones en tiempo real
+    if (markets.length === 0) {
+      setIsLoadingMarkets(true);
+    }
 
     const { data, error } = await supabase
       .from("markets")
@@ -123,7 +126,7 @@ export default function PredictionMarketDashboard() {
         image_url,
         market_options (id, option_name, color, total_votes)
       `)
-      .in("status", ["active", "resolved"]); 
+      .in("status", ["active", "resolved"]);
 
     if (error) {
       console.log("[v0] Error fetching markets:", error.message);
@@ -137,16 +140,22 @@ export default function PredictionMarketDashboard() {
     }
 
     setIsLoadingMarkets(false);
-  }, [supabase]);
+  }, [supabase, markets.length]);
 
   useEffect(() => {
     fetchMarkets();
   }, [fetchMarkets]);
 
+  // ACÁ ESTÁ EL NUEVO HOOK DE REALTIME
   useEffect(() => {
-    const channel = supabase.channel('realtime-markets')
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "markets" }, () => {
-         fetchMarkets(); 
+    const channel = supabase.channel('realtime-markets-dashboard')
+      .on("postgres_changes", { event: "*", schema: "public", table: "markets" }, () => {
+        // Si cambian los datos generales del mercado (ej: volumen total o estado)
+        fetchMarkets();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "market_options" }, () => {
+        // Si alguien vota y cambian las opciones
+        fetchMarkets();
       })
       .subscribe();
 
@@ -174,30 +183,26 @@ export default function PredictionMarketDashboard() {
     });
   }, [markets, selectedCategory, searchQuery]);
 
-  // ACÁ ESTÁ LA MAGIA DEL ORDENAMIENTO
   const sortedMarkets = useMemo(() => {
-    const now = new Date().getTime(); // Tomamos la hora actual una sola vez
+    const now = new Date().getTime();
 
     return [...filteredMarkets].sort((a, b) => {
-      // 1. Chequeamos si el mercado está cerrado (por status o por fecha)
       const isAClosed = a.status === 'resolved' || new Date(a.end_date).getTime() <= now;
       const isBClosed = b.status === 'resolved' || new Date(b.end_date).getTime() <= now;
 
-      // 2. Regla de oro: Si A está cerrado y B está activo, B va arriba (A se empuja al fondo)
       if (isAClosed && !isBClosed) return 1;
       if (!isAClosed && isBClosed) return -1;
 
-      // 3. Si ambos tienen el mismo estado (ambos activos o ambos cerrados), aplicamos el filtro que eligió el usuario
       switch (sortBy) {
-        case "trending": 
+        case "trending":
           return new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime();
-        case "newest": 
+        case "newest":
           return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
         case "ending_soon":
           return new Date(a.end_date).getTime() - new Date(b.end_date).getTime();
-        case "volume": 
+        case "volume":
           return b.total_volume - a.total_volume;
-        default: 
+        default:
           return 0;
       }
     });
@@ -213,16 +218,15 @@ export default function PredictionMarketDashboard() {
       <NavHeader points={userPoints} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode(!isDarkMode)} onPointsUpdate={handlePointsUpdate} userId={user?.id ?? null} userEmail={user?.email ?? null} onOpenAuthModal={() => setIsAuthModalOpen(true)} onSignOut={handleSignOut} isAdmin={userRole === "admin"} username={username} />
 
       <main className="container mx-auto px-4 py-4 md:py-6 max-w-[1400px]">
-        {/* BARRA HORIZONTAL MINIMALISTA ESTILO KALSHI */}
         <div className="flex flex-col lg:flex-row lg:items-center gap-3 lg:gap-6 mb-6 pb-4 border-b border-border/40 lg:pb-0 lg:h-14 lg:border-none">
-          
+
           <div className="relative w-full lg:w-72 shrink-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input 
-              placeholder="Buscar mercados, eventos..." 
-              value={searchQuery} 
-              onChange={(e) => setSearchQuery(e.target.value)} 
-              className="pl-9 bg-muted/20 border-transparent hover:border-border/50 focus-visible:border-primary/50 h-9 rounded-lg text-sm transition-all shadow-none" 
+            <Input
+              placeholder="Buscar mercados, eventos..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 bg-muted/20 border-transparent hover:border-border/50 focus-visible:border-primary/50 h-9 rounded-lg text-sm transition-all shadow-none"
             />
           </div>
 
@@ -230,7 +234,7 @@ export default function PredictionMarketDashboard() {
             <div className="flex shrink-0">
               <CategoryFilter selectedCategory={selectedCategory} onSelectCategory={setSelectedCategory} />
             </div>
-            
+
             <div className="flex gap-1 shrink-0 ml-auto border-l border-border/40 pl-4 items-center">
               <Button variant={sortBy === "trending" ? "secondary" : "ghost"} size="sm" onClick={() => setSortBy("trending")} className={cn("h-8 rounded-md px-2.5 text-xs font-semibold", sortBy === "trending" && "bg-muted/50 text-foreground")}>
                 Popular
@@ -289,14 +293,14 @@ export default function PredictionMarketDashboard() {
                   question={market.title}
                   category={market.category}
                   totalVolume={market.total_volume.toLocaleString()}
-                  endDate={formatDate(market.end_date)} 
-                  rawEndDate={market.end_date}          
+                  endDate={formatDate(market.end_date)}
+                  rawEndDate={market.end_date}
                   imageUrl={market.image_url}
                   options={market.options || []}
                   userId={user?.id ?? null}
                   userPoints={0}
-                  status={market.status}                
-                  winningOutcome={market.winning_outcome} 
+                  status={market.status}
+                  winningOutcome={market.winning_outcome}
                   onCategoryClick={setSelectedCategory}
                 />
               ))}
