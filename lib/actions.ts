@@ -398,3 +398,31 @@ export async function sellPartialShares(
 
   return { ok: true, error: null, cashoutValue };
 }
+
+export async function eliminateMarketOption(optionId: string) {
+  const supabase = await createClient();
+
+  const { data: optToEliminate } = await supabase.from("market_options").select("market_id").eq("id", optionId).single();
+  if (!optToEliminate) return { error: "Opción no encontrada" };
+  const marketId = optToEliminate.market_id;
+
+  const { error } = await supabase.from("market_options").update({ is_eliminated: true }).eq("id", optionId);
+  if (error) return { error: error.message };
+
+  const { data: options } = await supabase.from("market_options").select("*").eq("market_id", marketId);
+  const activeOpts = options?.filter(o => !o.is_eliminated) || [];
+  const totalVotes = activeOpts.reduce((acc, opt) => acc + Number(opt.total_votes || 0), 0);
+
+  const historyInserts = options?.map(opt => {
+    let percentage = 0;
+    if (!opt.is_eliminated) {
+      let price = (Number(opt.total_votes || 0) + 100.0) / (totalVotes + (activeOpts.length * 100.0));
+      percentage = Math.max(0.01, Math.min(0.99, price)) * 100;
+    }
+    return { market_id: marketId, option_id: opt.id, percentage: percentage };
+  }) || [];
+
+  await supabase.from("market_option_history").insert(historyInserts);
+
+  return { success: true };
+}

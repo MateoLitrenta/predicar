@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-// ACÁ ESTÁ LA CORRECCIÓN: Agregué TrendingUp a la lista de íconos
 import { Coins, Clock, Activity, Check, Lock, Trophy, TrendingUp } from "lucide-react";
 import {
   Dialog,
@@ -21,6 +20,7 @@ interface MarketOption {
   option_name: string;
   color: string;
   total_votes: number;
+  is_eliminated?: boolean; // Aseguramos que la interfaz conozca esta propiedad
 }
 
 interface MarketCardProps {
@@ -29,12 +29,12 @@ interface MarketCardProps {
   category: string;
   totalVolume: string;
   endDate: string;
-  rawEndDate?: string; 
+  rawEndDate?: string;
   imageUrl?: string | null;
   options: MarketOption[];
   userId: string | null;
   userPoints: number;
-  status?: string; 
+  status?: string;
   winningOutcome?: string | null;
   onBetPlaced?: (newPoints: number) => void;
   onOpenAuthModal?: () => void;
@@ -72,36 +72,45 @@ export function MarketCard({
     }
   };
 
-  const realTotalVotes = options.reduce((acc, opt) => acc + Number(opt.total_votes || 0), 0);
-  const totalOptsCount = options.length || 2;
+  // --- LÓGICA DE PROBABILIDADES LIMPIA (Igual a la página del mercado) ---
 
+  // 1. Filtramos a los eliminados para que no aparezcan en la UI
+  const activeOptions = options.filter(opt => !opt.is_eliminated);
+
+  // 2. Calculamos el volumen SOLO de los vivos para que sumen 100%
+  const activeTotalVotes = activeOptions.reduce((acc, opt) => acc + Number(opt.total_votes || 0), 0);
+  const totalActiveOptsCount = activeOptions.length || 2;
+
+  // 3. Función matemática pura
   const getProbability = (votes: number) => {
-    let ammPrice = (Number(votes) + 100.0) / (realTotalVotes + (totalOptsCount * 100.0));
+    let ammPrice = (Number(votes) + 100.0) / (activeTotalVotes + (totalActiveOptsCount * 100.0));
     ammPrice = Math.max(0.01, Math.min(0.99, ammPrice));
     return ammPrice * 100;
   };
 
-  const sortedOptions = [...options].sort((a, b) => Number(b.total_votes) - Number(a.total_votes));
-  const isBinaryYesNo = options.length === 2 && 
-    options.some(o => ['sí', 'si', 'yes'].includes(o.option_name.toLowerCase())) && 
-    options.some(o => o.option_name.toLowerCase() === 'no');
+  // 4. Ordenamos las opciones activas de mayor a menor probabilidad
+  const sortedActiveOptions = [...activeOptions].sort((a, b) => Number(b.total_votes) - Number(a.total_votes));
+
+  const isBinaryYesNo = activeOptions.length === 2 &&
+    activeOptions.some(o => ['sí', 'si', 'yes'].includes(o.option_name.toLowerCase())) &&
+    activeOptions.some(o => o.option_name.toLowerCase() === 'no');
 
   return (
     <>
-      <Card 
+      <Card
         onClick={() => {
           if (isClosed) {
-            handleNavigateToMarket(); 
+            handleNavigateToMarket();
           } else {
-            setSelectedAction(null); 
-            setIsPreviewOpen(true); 
+            setSelectedAction(null);
+            setIsPreviewOpen(true);
           }
         }}
-        className={cn("group bg-card transition-all duration-200 border border-border/40 shadow-sm relative overflow-hidden flex flex-col h-full cursor-pointer hover:border-primary/40 hover:shadow-md", 
+        className={cn("group bg-card transition-all duration-200 border border-border/40 shadow-sm relative overflow-hidden flex flex-col h-full cursor-pointer hover:border-primary/40 hover:shadow-md",
           isClosed ? "opacity-75 bg-muted/10" : "")}
       >
         <CardContent className="p-3.5 flex flex-col flex-1 gap-2.5">
-          
+
           {/* HEADER: Imagen, Título y Categoría */}
           <div className="flex gap-2.5 items-start">
             <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center shrink-0 border border-border/50 overflow-hidden relative">
@@ -113,8 +122,8 @@ export function MarketCard({
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between mb-1">
-                <Badge 
-                  variant="secondary" 
+                <Badge
+                  variant="secondary"
                   onClick={(e) => { e.stopPropagation(); if (onCategoryClick) onCategoryClick(category); }}
                   className="text-[10px] uppercase tracking-wider px-1.5 py-0 h-4 bg-muted/50 text-muted-foreground hover:bg-primary/20 hover:text-primary cursor-pointer transition-colors"
                 >
@@ -132,20 +141,20 @@ export function MarketCard({
             </div>
           </div>
 
-          {/* OPCIONES TIPO PÍLDORA */}
+          {/* OPCIONES TIPO PÍLDORA (Solo muestra los 2 mejores activos) */}
           <div className="flex flex-col gap-2 flex-1 mt-3">
-            {sortedOptions.slice(0, 2).map((opt) => {
+            {sortedActiveOptions.slice(0, 2).map((opt) => {
               const pct = Math.round(getProbability(opt.total_votes));
               const isWinner = winningOutcome === opt.id;
-              
+
               const optNameLower = opt.option_name.toLowerCase();
               const isYes = ['sí', 'si', 'yes'].includes(optNameLower);
               const isNo = optNameLower === 'no';
-              
+
               let pctColorClass = "";
               let pctStyle = {};
               let fillColor = opt.color || '#3b82f6';
-              
+
               if (isYes) {
                 pctColorClass = "text-green-600 dark:text-green-400";
                 fillColor = '#22c55e'; // Verde para Sí
@@ -155,15 +164,15 @@ export function MarketCard({
               } else {
                 pctStyle = { color: fillColor };
               }
-              
+
               return (
                 <div key={opt.id} className="relative overflow-hidden bg-muted/10 hover:bg-muted/20 transition-colors border border-border/50 rounded-lg h-9 w-full cursor-pointer">
                   {/* Barra de progreso de fondo */}
-                  <div 
-                    className="absolute top-0 left-0 h-full opacity-20 transition-all duration-500 ease-out" 
-                    style={{ width: `${pct}%`, backgroundColor: fillColor }} 
+                  <div
+                    className="absolute top-0 left-0 h-full opacity-20 transition-all duration-500 ease-out"
+                    style={{ width: `${pct}%`, backgroundColor: fillColor }}
                   />
-                  
+
                   {/* Contenido (Textos por encima del fondo) */}
                   <div className="relative z-10 flex justify-between items-center w-full h-full px-3">
                     <div className="flex items-center gap-1.5 min-w-0 pr-2">
@@ -179,10 +188,10 @@ export function MarketCard({
                 </div>
               );
             })}
-            
-            {sortedOptions.length > 2 && (
+
+            {sortedActiveOptions.length > 2 && (
               <div className="text-[10px] text-muted-foreground text-center font-medium mt-2">
-                + {sortedOptions.length - 2} opciones
+                + {sortedActiveOptions.length - 2} opciones
               </div>
             )}
           </div>
@@ -219,14 +228,15 @@ export function MarketCard({
             </DialogHeader>
           </div>
 
-          <div className="px-4 sm:px-6 py-4 bg-muted/10 border-y border-border/50 max-h-[400px] overflow-y-auto">
+          {/* ACÁ SE APLICA EL FILTRO: Solo mapeamos las sortedActiveOptions */}
+          <div className="px-4 sm:px-6 py-4 bg-muted/10 border-y border-border/50 max-h-[400px] overflow-y-auto scrollbar-thin scrollbar-thumb-border">
             <div className="flex justify-between items-center mb-3">
-              <h4 className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Valor de las acciones</h4>
+              <h4 className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Opciones Activas</h4>
               {!isBinaryYesNo && <span className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider hidden sm:block">Operar</span>}
             </div>
-            
+
             <div className="space-y-3">
-              {sortedOptions.map((opt) => {
+              {sortedActiveOptions.map((opt) => {
                 const yesPrice = Math.round(getProbability(opt.total_votes));
                 const noPrice = 100 - yesPrice;
                 const isYesSelected = selectedAction?.optionId === opt.id && selectedAction?.type === 'yes';
@@ -237,7 +247,7 @@ export function MarketCard({
                     <div key={opt.id} onClick={() => setSelectedAction({ optionId: opt.id, type: 'yes' })} className={cn("flex items-center justify-between p-4 rounded-xl bg-card border shadow-sm cursor-pointer transition-all", isYesSelected ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border/50 hover:border-primary/50")}>
                       <div className="flex items-center gap-3">
                         <div className="w-4 h-4 rounded-full shadow-inner relative flex items-center justify-center" style={{ backgroundColor: opt.color }}>
-                           {isYesSelected && <Check className="w-3 h-3 text-white absolute" />}
+                          {isYesSelected && <Check className="w-3 h-3 text-white absolute" />}
                         </div>
                         <span className={cn("font-bold text-lg", isYesSelected && "text-primary")}>{opt.option_name}</span>
                       </div>

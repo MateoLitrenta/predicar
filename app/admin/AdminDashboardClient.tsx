@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { getProfile, approveMarket, rejectMarket, resolveMarket, updateMarket, deleteMarket, createAdminMarket } from "@/lib/actions";
+import { getProfile, approveMarket, rejectMarket, resolveMarket, updateMarket, deleteMarket, createAdminMarket, eliminateMarketOption } from "@/lib/actions";
 import type { ProfileResult } from "@/lib/actions";
 import { createClient } from "@/lib/supabase/client";
 import { NavHeader } from "@/components/nav-header";
@@ -36,13 +36,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, CheckCircle2, XCircle, ArrowLeft, Pencil, Trash2, Plus, X, Image as ImageIcon, Trophy, Clock, Search, Filter } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, ArrowLeft, Pencil, Trash2, Plus, X, Image as ImageIcon, Trophy, Clock, Search, Filter, Settings2, UserX } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 interface MarketOption {
   id: string;
   option_name: string;
+  is_eliminated?: boolean;
 }
 
 interface Market {
@@ -57,7 +58,7 @@ interface Market {
   total_volume: number;
   image_url?: string | null;
   winning_outcome?: string | null;
-  market_options?: MarketOption[]; 
+  market_options?: MarketOption[];
   [key: string]: unknown;
 }
 
@@ -70,24 +71,27 @@ export default function AdminDashboardClient() {
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
   const [profile, setProfile] = useState<ProfileResult>(null);
   const [isDarkMode, setIsDarkMode] = useState(true);
-  
+
   const [editingMarket, setEditingMarket] = useState<Market | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [editForm, setEditForm] = useState<{ title: string; description: string; category: string; end_date: string; image_url: string; options: MarketOption[] }>({ title: "", description: "", category: "", end_date: "", image_url: "", options: [] });
-  
+
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
-  
+
   const [createForm, setCreateForm] = useState<{
     title: string; description: string; category: string; end_date: string; image_url: string; marketType: "binary" | "multiple"; options: string[];
-  }>({ 
+  }>({
     title: "", description: "", category: "politica", end_date: "", image_url: "", marketType: "binary", options: ["", ""]
   });
 
   const [resolvingMarket, setResolvingMarket] = useState<Market | null>(null);
   const [selectedWinningOption, setSelectedWinningOption] = useState<string>("");
-  
+
   const [deletingMarket, setDeletingMarket] = useState<{ id: string, title: string } | null>(null);
+
+  // NUEVO ESTADO PARA GESTIONAR OPCIONES
+  const [managingMarket, setManagingMarket] = useState<Market | null>(null);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("todos");
@@ -109,9 +113,9 @@ export default function AdminDashboardClient() {
   const fetchMarkets = async () => {
     const { data, error } = await supabase
       .from("markets")
-      .select('*, market_options(id, option_name)')
+      .select('*, market_options(id, option_name, is_eliminated)')
       .order("created_at", { ascending: false });
-      
+
     if (error) {
       console.error("[Admin] Error:", error);
       setMarkets([]);
@@ -152,7 +156,7 @@ export default function AdminDashboardClient() {
     e.preventDefault();
     if (!editingMarket) return;
     setIsSaving(true);
-    
+
     const { error } = await updateMarket(editingMarket.id, {
       title: editForm.title.trim(),
       description: editForm.description.trim() || null,
@@ -168,7 +172,7 @@ export default function AdminDashboardClient() {
     }
 
     setIsSaving(false);
-    
+
     if (error) {
       toast({ title: "Error", description: error, variant: "destructive" });
     } else {
@@ -239,12 +243,12 @@ export default function AdminDashboardClient() {
     if (!resolvingMarket || !selectedWinningOption) return;
     const { id } = resolvingMarket;
     setProcessingIds((p) => new Set(p).add(id));
-    
+
     const { error } = await resolveMarket(id, selectedWinningOption);
-    
+
     setResolvingMarket(null);
     setSelectedWinningOption("");
-    
+
     if (error) toast({ title: "Error al resolver", description: error, variant: "destructive" });
     else { toast({ title: "Mercado Finalizado", description: `Se repartieron los puntos.` }); await fetchMarkets(); }
     setProcessingIds((p) => { const n = new Set(p); n.delete(id); return n; });
@@ -261,10 +265,32 @@ export default function AdminDashboardClient() {
     setProcessingIds((p) => { const n = new Set(p); n.delete(id); return n; });
   };
 
+  // NUEVA FUNCIÓN PARA ELIMINAR OPCIÓN
+  const handleEliminateOption = async (optionId: string) => {
+    setProcessingIds((p) => new Set(p).add(optionId));
+    const { error } = await eliminateMarketOption(optionId);
+
+    if (error) {
+      toast({ title: "Error", description: error, variant: "destructive" });
+    } else {
+      toast({ title: "Opción Eliminada", description: "Ya no se podrá apostar por esta opción." });
+
+      // Actualizar el estado local para que se vea reflejado en el modal abierto
+      if (managingMarket) {
+        const updatedOptions = managingMarket.market_options?.map(opt =>
+          opt.id === optionId ? { ...opt, is_eliminated: true } : opt
+        );
+        setManagingMarket({ ...managingMarket, market_options: updatedOptions });
+      }
+      await fetchMarkets();
+    }
+    setProcessingIds((p) => { const n = new Set(p); n.delete(optionId); return n; });
+  };
+
   const isOverdue = (endDateStr: string) => {
     if (!endDateStr) return false;
     const end = new Date(endDateStr);
-    end.setHours(23, 59, 59, 999); 
+    end.setHours(23, 59, 59, 999);
     const now = new Date();
     return now > end;
   };
@@ -317,9 +343,9 @@ export default function AdminDashboardClient() {
       if (a.status === 'resolved' && b.status === 'resolved') {
         const aCreated = new Date(a.created_at || 0);
         const bCreated = new Date(b.created_at || 0);
-        return bCreated.getTime() - aCreated.getTime(); 
+        return bCreated.getTime() - aCreated.getTime();
       }
-      return 0; 
+      return 0;
     });
   }, [markets, searchQuery, statusFilter, categoryFilter]);
 
@@ -327,11 +353,11 @@ export default function AdminDashboardClient() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <NavHeader points={safeNumber(profile?.points ?? 10000)} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode(!isDarkMode)} onPointsUpdate={() => {}} userId={profile?.id ? String(profile.id) : null} userEmail={profile?.email != null ? String(profile.email) : null} onOpenAuthModal={() => {}} onSignOut={async () => { await createClient().auth.signOut(); router.replace("/"); }} isAdmin={true} username={profile?.username != null ? String(profile.username) : null} />
+      <NavHeader points={safeNumber(profile?.points ?? 10000)} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode(!isDarkMode)} onPointsUpdate={() => { }} userId={profile?.id ? String(profile.id) : null} userEmail={profile?.email != null ? String(profile.email) : null} onOpenAuthModal={() => { }} onSignOut={async () => { await createClient().auth.signOut(); router.replace("/"); }} isAdmin={true} username={profile?.username != null ? String(profile.username) : null} />
 
       <main className="container mx-auto px-4 py-8 flex-1">
         <div className="mb-6"><Button variant="ghost" size="sm" asChild className="-ml-2 text-muted-foreground hover:text-foreground"><Link href="/"><ArrowLeft className="w-4 h-4 mr-2" />Volver</Link></Button></div>
-        
+
         <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div>
             <Badge className="mb-3 bg-primary/10 text-primary border-primary/20 font-bold uppercase tracking-widest text-[10px] px-3 py-1">ADMINISTRADOR</Badge>
@@ -344,9 +370,9 @@ export default function AdminDashboardClient() {
         <div className="mb-8 flex flex-col lg:flex-row gap-4 p-2 bg-card/40 border border-border/50 rounded-2xl shadow-sm backdrop-blur-xl">
           <div className="relative flex-1">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-            <Input 
-              placeholder="Buscar mercado por pregunta..." 
-              className="pl-12 h-12 bg-background/60 border-border/50 rounded-xl text-base w-full focus-visible:ring-primary font-medium" 
+            <Input
+              placeholder="Buscar mercado por pregunta..."
+              className="pl-12 h-12 bg-background/60 border-border/50 rounded-xl text-base w-full focus-visible:ring-primary font-medium"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
@@ -407,6 +433,8 @@ export default function AdminDashboardClient() {
                   ) : (
                     sortedMarkets.map((market) => {
                       const overdue = isOverdue(market.end_date) && market.status === 'active';
+                      const isMultiChoice = market.market_options && market.market_options.length > 2;
+
                       return (
                         <TableRow key={String(market.id)} className={cn("transition-colors", market.status === 'resolved' ? 'opacity-60 bg-muted/10' : overdue ? 'bg-red-500/5' : '')}>
                           <TableCell>
@@ -425,7 +453,7 @@ export default function AdminDashboardClient() {
                           <TableCell className="text-foreground font-black">{safeNumber(market.total_volume).toLocaleString()} pts</TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-2">
-                              
+
                               {/* BLOQUEO DE EDICIÓN PARA RESUELTOS */}
                               {market.status !== "resolved" && (
                                 <Button size="icon" variant="outline" className="h-9 w-9 hover:text-primary transition-colors bg-background" onClick={() => setEditingMarket(market)}><Pencil className="w-4 h-4" /></Button>
@@ -437,17 +465,32 @@ export default function AdminDashboardClient() {
                                   <Button size="icon" variant="destructive" onClick={() => handleReject(market.id)} disabled={processingIds.has(market.id)} className="h-9 w-9">{processingIds.has(market.id) ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}</Button>
                                 </>
                               )}
-                              
+
                               {market.status === "active" && (
-                                <Button 
-                                  size="sm" 
-                                  variant={overdue ? "default" : "outline"}
-                                  className={cn("font-bold h-9 transition-all", overdue ? "bg-red-500 hover:bg-red-600 text-white shadow-md shadow-red-500/20 animate-pulse" : "border-primary text-primary hover:bg-primary hover:text-primary-foreground")} 
-                                  onClick={() => { setResolvingMarket(market); setSelectedWinningOption(""); }} 
-                                  disabled={processingIds.has(market.id)}
-                                >
-                                  <Trophy className="w-4 h-4 mr-1.5" /> {overdue ? "Resolver YA" : "Resolver"}
-                                </Button>
+                                <>
+                                  {/* BOTÓN NUEVO: GESTIONAR OPCIONES (solo para múltiples) */}
+                                  {isMultiChoice && (
+                                    <Button
+                                      size="icon"
+                                      variant="outline"
+                                      className="h-9 w-9 hover:text-amber-500 transition-colors bg-background border-amber-500/20"
+                                      onClick={() => setManagingMarket(market)}
+                                      title="Gestionar Opciones Eliminadas"
+                                    >
+                                      <Settings2 className="w-4 h-4" />
+                                    </Button>
+                                  )}
+
+                                  <Button
+                                    size="sm"
+                                    variant={overdue ? "default" : "outline"}
+                                    className={cn("font-bold h-9 transition-all", overdue ? "bg-red-500 hover:bg-red-600 text-white shadow-md shadow-red-500/20 animate-pulse" : "border-primary text-primary hover:bg-primary hover:text-primary-foreground")}
+                                    onClick={() => { setResolvingMarket(market); setSelectedWinningOption(""); }}
+                                    disabled={processingIds.has(market.id)}
+                                  >
+                                    <Trophy className="w-4 h-4 mr-1.5" /> {overdue ? "Resolver YA" : "Resolver"}
+                                  </Button>
+                                </>
                               )}
 
                               {/* BLOQUEO DE ELIMINACIÓN/REEMBOLSO PARA RESUELTOS */}
@@ -473,9 +516,11 @@ export default function AdminDashboardClient() {
               ) : (
                 sortedMarkets.map((market) => {
                   const overdue = isOverdue(market.end_date) && market.status === 'active';
+                  const isMultiChoice = market.market_options && market.market_options.length > 2;
+
                   return (
                     <div key={String(market.id)} className={cn("p-4 rounded-xl border bg-card flex flex-col gap-4 shadow-sm transition-colors", market.status === 'resolved' ? 'opacity-70 bg-muted/20 border-border/50' : overdue ? 'border-red-500/50 bg-red-500/5' : 'border-border/50')}>
-                      
+
                       <div className="flex items-start gap-3">
                         {market.image_url ? (
                           <img src={String(market.image_url)} alt="Miniatura" className="w-14 h-14 rounded-lg object-cover border border-border/50 shrink-0" />
@@ -528,15 +573,28 @@ export default function AdminDashboardClient() {
                         )}
 
                         {market.status === "active" && (
-                          <Button 
-                            size="sm" 
-                            variant={overdue ? "default" : "outline"}
-                            className={cn("flex-1 h-11 font-bold text-base transition-all", overdue ? "bg-red-500 hover:bg-red-600 text-white shadow-md shadow-red-500/20 animate-pulse" : "border-primary text-primary hover:bg-primary hover:text-primary-foreground")} 
-                            onClick={() => { setResolvingMarket(market); setSelectedWinningOption(""); }} 
-                            disabled={processingIds.has(market.id)}
-                          >
-                            <Trophy className="w-5 h-5 mr-1.5" /> {overdue ? "Resolver YA" : "Resolver"}
-                          </Button>
+                          <>
+                            {isMultiChoice && (
+                              <Button
+                                size="icon"
+                                variant="outline"
+                                className="h-11 w-11 shrink-0 hover:text-amber-500 transition-colors bg-background border-amber-500/20"
+                                onClick={() => setManagingMarket(market)}
+                              >
+                                <Settings2 className="w-5 h-5" />
+                              </Button>
+                            )}
+
+                            <Button
+                              size="sm"
+                              variant={overdue ? "default" : "outline"}
+                              className={cn("flex-1 h-11 font-bold text-base transition-all", overdue ? "bg-red-500 hover:bg-red-600 text-white shadow-md shadow-red-500/20 animate-pulse" : "border-primary text-primary hover:bg-primary hover:text-primary-foreground")}
+                              onClick={() => { setResolvingMarket(market); setSelectedWinningOption(""); }}
+                              disabled={processingIds.has(market.id)}
+                            >
+                              <Trophy className="w-5 h-5 mr-1.5" /> {overdue ? "Resolver YA" : "Resolver"}
+                            </Button>
+                          </>
                         )}
 
                         {/* BLOQUEO DE ELIMINACIÓN/REEMBOLSO MOBILE PARA RESUELTOS */}
@@ -553,6 +611,44 @@ export default function AdminDashboardClient() {
             </div>
           </>
         )}
+
+        {/* MODAL NUEVO: GESTIONAR OPCIONES (ELIMINACIONES PARCIALES) */}
+        <Dialog open={!!managingMarket} onOpenChange={(open) => !open && setManagingMarket(null)}>
+          <DialogContent className="w-[90vw] max-w-md rounded-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-xl font-black"><Settings2 className="w-6 h-6 text-amber-500" /> Gestionar Opciones</DialogTitle>
+              <DialogDescription className="pt-2 text-base text-foreground">
+                Eliminá las opciones que ya perdieron (ej: equipos descalificados). <strong>La gente ya no podrá comprar acciones de estas opciones.</strong>
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4 space-y-3 max-h-[50vh] overflow-y-auto pr-2">
+              {managingMarket?.market_options?.map(opt => (
+                <div key={opt.id} className={cn("flex items-center justify-between p-3 rounded-lg border", opt.is_eliminated ? "bg-red-500/5 border-red-500/20 opacity-70" : "bg-muted/30 border-border/50")}>
+                  <div className="flex items-center gap-3">
+                    <div className={cn("w-2 h-2 rounded-full", opt.is_eliminated ? "bg-red-500" : "bg-green-500")} />
+                    <span className={cn("font-medium", opt.is_eliminated && "line-through text-muted-foreground")}>{opt.option_name}</span>
+                  </div>
+                  {!opt.is_eliminated ? (
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => handleEliminateOption(opt.id)}
+                      disabled={processingIds.has(opt.id)}
+                      className="h-8 text-xs font-bold"
+                    >
+                      {processingIds.has(opt.id) ? <Loader2 className="w-4 h-4 animate-spin" /> : <><UserX className="w-3.5 h-3.5 mr-1" /> Eliminar</>}
+                    </Button>
+                  ) : (
+                    <Badge variant="outline" className="text-red-500 border-red-500/30 bg-red-500/10">Eliminado</Badge>
+                  )}
+                </div>
+              ))}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setManagingMarket(null)} className="h-12 w-full font-bold text-base">Cerrar</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <Dialog open={!!deletingMarket} onOpenChange={(open) => !open && setDeletingMarket(null)}>
           <DialogContent className="w-[90vw] max-w-md rounded-2xl">
@@ -583,16 +679,26 @@ export default function AdminDashboardClient() {
                 </SelectTrigger>
                 <SelectContent>
                   {resolvingMarket?.market_options?.map(opt => (
-                    <SelectItem key={opt.id} value={opt.id} className="h-12 text-base font-medium cursor-pointer">{opt.option_name}</SelectItem>
+                    <SelectItem
+                      key={opt.id}
+                      value={opt.id}
+                      disabled={opt.is_eliminated}
+                      className="h-12 text-base font-medium cursor-pointer"
+                    >
+                      <div className="flex items-center justify-between w-full">
+                        <span>{opt.option_name}</span>
+                        {opt.is_eliminated && <span className="text-xs text-red-500 ml-2">(Eliminado)</span>}
+                      </div>
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <DialogFooter className="gap-2 sm:gap-0 mt-2">
               <Button variant="outline" onClick={() => setResolvingMarket(null)} className="h-12 w-full sm:w-auto font-bold text-base">Cancelar</Button>
-              <Button 
-                onClick={confirmResolve} 
-                disabled={!selectedWinningOption} 
+              <Button
+                onClick={confirmResolve}
+                disabled={!selectedWinningOption}
                 className="bg-primary hover:bg-primary/90 text-primary-foreground font-black h-12 w-full sm:w-auto text-base shadow-md"
               >
                 Confirmar Resolución
@@ -602,7 +708,7 @@ export default function AdminDashboardClient() {
         </Dialog>
 
         <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
-           <DialogContent className="w-[95vw] max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl">
+          <DialogContent className="w-[95vw] max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl">
             <DialogHeader>
               <DialogTitle className="text-2xl font-black">Crear Mercado Inmediato</DialogTitle>
               <DialogDescription className="text-base">
@@ -622,7 +728,7 @@ export default function AdminDashboardClient() {
                 <Label className="font-bold">Link de la Imagen (Opcional)</Label>
                 <Input placeholder="https://ejemplo.com/foto.jpg" value={createForm.image_url} onChange={(e) => setCreateForm((f) => ({ ...f, image_url: e.target.value }))} className="h-12 text-base bg-muted/50" />
               </div>
-              
+
               <div className="space-y-4 p-5 bg-muted/30 rounded-xl border border-border/50">
                 <Label className="font-black text-base uppercase tracking-wider">Tipo de Mercado</Label>
                 <div className="grid grid-cols-2 gap-3 mb-2">
@@ -691,20 +797,20 @@ export default function AdminDashboardClient() {
                 <Label className="font-bold">Pregunta</Label>
                 <Input value={editForm.title} onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))} required className="h-12 text-base font-medium bg-muted/50" />
               </div>
-              
+
               <div className="space-y-3 p-5 bg-muted/30 rounded-xl border border-border/50">
                 <Label className="font-black text-base uppercase tracking-wider mb-2 block">Editar opciones</Label>
                 {editForm.options.map((opt, index) => (
                   <div key={opt.id} className="flex items-center gap-3">
                     <span className="w-6 text-sm font-black text-muted-foreground">{index + 1}.</span>
-                    <Input 
-                      value={opt.option_name} 
+                    <Input
+                      value={opt.option_name}
                       className="h-12 text-base font-medium flex-1 bg-background"
                       onChange={(e) => {
                         const newOpts = [...editForm.options];
                         newOpts[index].option_name = e.target.value;
                         setEditForm(f => ({ ...f, options: newOpts }));
-                      }} 
+                      }}
                     />
                   </div>
                 ))}
@@ -728,16 +834,15 @@ export default function AdminDashboardClient() {
                     </SelectContent>
                   </Select>
                 </div>
-                
-                {/* ACÁ AGREGAMOS EL INPUT DE LA FECHA DE CIERRE */}
+
                 <div className="space-y-2">
                   <Label className="font-bold">Fecha de Cierre</Label>
-                  <Input 
-                    type="date" 
-                    value={editForm.end_date} 
-                    onChange={(e) => setEditForm((f) => ({ ...f, end_date: e.target.value }))} 
-                    required 
-                    className="h-12 text-base font-medium bg-muted/50" 
+                  <Input
+                    type="date"
+                    value={editForm.end_date}
+                    onChange={(e) => setEditForm((f) => ({ ...f, end_date: e.target.value }))}
+                    required
+                    className="h-12 text-base font-medium bg-muted/50"
                   />
                 </div>
               </div>

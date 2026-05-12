@@ -18,6 +18,7 @@ interface MarketOption {
   option_name: string;
   color: string;
   total_votes: number;
+  is_eliminated?: boolean;
 }
 
 interface Market {
@@ -124,7 +125,7 @@ export default function PredictionMarketDashboard() {
         created_at,
         updated_at,
         image_url,
-        market_options (id, option_name, color, total_votes)
+        market_options (id, option_name, color, total_votes, is_eliminated)
       `)
       .in("status", ["active", "resolved"]);
 
