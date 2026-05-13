@@ -552,6 +552,12 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
 
     activityFeed.forEach(item => {
       if (item.activityType === 'bet' && item.status !== 'sold') {
+        // Buscamos a qué opción le apostó
+        const opt = options.find(o => o.id === item.outcome);
+
+        // Si la opción existe y YA ESTÁ ELIMINADA, ignoramos esta plata (vale 0)
+        if (opt && opt.is_eliminated) return;
+
         if (!holders[item.user_id]) {
           holders[item.user_id] = {
             userId: item.user_id,
@@ -564,9 +570,12 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
       }
     });
 
-    return Object.values(holders).sort((a, b) => b.invested - a.invested).slice(0, 5);
-  }, [activityFeed]);
-
+    // Filtramos para que no queden usuarios con 0 puntos en el ranking
+    return Object.values(holders)
+      .filter(h => h.invested > 0)
+      .sort((a, b) => b.invested - a.invested)
+      .slice(0, 5);
+  }, [activityFeed, options]); // Clave: agregar 'options' a las dependencias
   const orderSummary = useMemo(() => {
     if (!selectedOptionId || !betAmount || isNaN(Number(betAmount)) || Number(betAmount) <= 0) return null;
     const amount = Number(betAmount);

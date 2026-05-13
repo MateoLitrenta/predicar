@@ -402,27 +402,61 @@ export async function sellPartialShares(
 export async function eliminateMarketOption(optionId: string) {
   const supabase = await createClient();
 
-  const { data: optToEliminate } = await supabase.from("market_options").select("market_id").eq("id", optionId).single();
-  if (!optToEliminate) return { error: "Opción no encontrada" };
-  const marketId = optToEliminate.market_id;
+  // 1. Conseguir el market_id de la opción que estamos eliminando
+  const { data: optData } = await supabase
+    .from("market_options")
+    .select("market_id")
+    .eq("id", optionId)
+    .single();
 
-  const { error } = await supabase.from("market_options").update({ is_eliminated: true }).eq("id", optionId);
-  if (error) return { error: error.message };
+  if (!optData) return { error: "Opción no encontrada" };
+  const marketId = optData.market_id;
 
-  const { data: options } = await supabase.from("market_options").select("*").eq("market_id", marketId);
-  const activeOpts = options?.filter(o => !o.is_eliminated) || [];
-  const totalVotes = activeOpts.reduce((acc, opt) => acc + Number(opt.total_votes || 0), 0);
+  // 2. Marcar la opción como eliminada
+  const { error: updateError } = await supabase
+    .from("market_options")
+    .update({ is_eliminated: true })
+    .eq("id", optionId);
 
-  const historyInserts = options?.map(opt => {
-    let percentage = 0;
-    if (!opt.is_eliminated) {
-      let price = (Number(opt.total_votes || 0) + 100.0) / (totalVotes + (activeOpts.length * 100.0));
-      percentage = Math.max(0.01, Math.min(0.99, price)) * 100;
-    }
-    return { market_id: marketId, option_id: opt.id, percentage: percentage };
-  }) || [];
+  if (updateError) return { error: updateError.message };
 
-  await supabase.from("market_option_history").insert(historyInserts);
+  // --- NUEVO: MATAR LAS APUESTAS ACTIVAS DE ESTA OPCIÓN ---
+  // A los que apostaron a favor ("yes"), la pierden automáticamente.
+  await supabase
+    .from("bets")
+    .update({ status: 'lost' }) // Cambialo a 'resolved' si usás esa palabra para finalizadas
+    .eq("outcome", optionId)
+    .eq("direction", "yes")
+    .eq("status", "active");
+  // --------------------------------------------------------
+
+  // 3. Traer todas las opciones frescas para recalcular los porcentajes del historial
+  const { data: options } = await supabase
+    .from("market_options")
+    .select("*")
+    .eq("market_id", marketId);
+
+  if (options && options.length > 0) {
+    const activeOpts = options.filter(o => !o.is_eliminated);
+    const activeVotes = activeOpts.reduce((acc, opt) => acc + Number(opt.total_votes || 0), 0);
+    const totalOptsCount = activeOpts.length || 2;
+
+    const historyInserts = options.map(opt => {
+      let percentage = 0;
+      if (!opt.is_eliminated) {
+        let price = (Number(opt.total_votes || 0) + 100.0) / (activeVotes + (totalOptsCount * 100.0));
+        percentage = Math.max(0.01, Math.min(0.99, price)) * 100;
+      }
+      return {
+        market_id: marketId,
+        option_id: opt.id,
+        percentage: percentage
+      };
+    });
+
+    // 4. Insertar la foto histórica EXACTA
+    await supabase.from("market_option_history").insert(historyInserts);
+  }
 
   return { success: true };
 }
