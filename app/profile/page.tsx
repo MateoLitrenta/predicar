@@ -78,6 +78,21 @@ export default function ProfilePage() {
   const [isCopied, setIsCopied] = useState(false);
   const [referredUsers, setReferredUsers] = useState<any[]>([]);
 
+  const isBetActive = useCallback((b: BetWithMarket) => {
+    const market = getMarket(b);
+    if (!market) return false;
+    return ACTIVE_STATUSES.includes(String(market.status).toLowerCase()) &&
+      ACTIVE_STATUSES.includes(String(b.status).toLowerCase());
+  }, []);
+
+  const isBetFinished = useCallback((b: BetWithMarket) => {
+    const market = getMarket(b);
+    if (!market) return false;
+    return FINISHED_STATUSES.includes(String(market.status).toLowerCase()) ||
+      String(b.status).toLowerCase() === 'lost' ||
+      String(b.status).toLowerCase() === 'sold';
+  }, []);
+
   const fetchUserData = useCallback(async () => {
     setIsLoadingBets(true);
     setIsLoadingTransactions(true);
@@ -136,6 +151,8 @@ export default function ProfilePage() {
   };
 
   const calculatePositionValue = useCallback((bet: any, market: any, opt: any) => {
+    if (opt?.is_eliminated) return 0;
+
     const shares = Number(bet.shares || 0);
     if (shares <= 0) return bet.amount;
     const direction = bet.direction || 'yes';
@@ -152,7 +169,7 @@ export default function ProfilePage() {
     let totalCurrentValueActive = 0;
 
     bets
-      .filter((b) => getMarket(b) && ACTIVE_STATUSES.includes(String(getMarket(b)!.status).toLowerCase()))
+      .filter(isBetActive)
       .forEach((bet) => {
         const market = getMarket(bet);
         const opt = bet.option_details;
@@ -163,7 +180,7 @@ export default function ProfilePage() {
 
     const totalPortfolioValue = availableCapital + totalCurrentValueActive;
     return { availableCapital, totalPortfolioValue, lockedValueOffset: totalCurrentValueActive };
-  }, [bets, profile?.points, calculatePositionValue, marketOptions]);
+  }, [bets, profile?.points, calculatePositionValue, isBetActive]);
 
   const processedTransactions = useMemo(() => {
     if (!transactions.length) return [];
@@ -176,14 +193,11 @@ export default function ProfilePage() {
     });
   }, [transactions, profile?.points]);
 
-  // LÓGICA DE GRÁFICO FINAL Y ESTABLE: CÁLCULO HACIA ATRÁS
   const chartData = useMemo(() => {
     const chronologicalTxs = [...transactions].sort(
       (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
     );
 
-    // 1. ANCLAJE A LA REALIDAD: Calculamos el balance histórico hacia atrás 
-    // partiendo de los puntos reales y actuales de la base de datos.
     let currentTempBalance = profile?.points ?? 0;
     const txsWithBalance = [...chronologicalTxs].reverse().map((tx) => {
       const balanceAfter = currentTempBalance;
@@ -192,7 +206,7 @@ export default function ProfilePage() {
       return { ...tx, balanceAfter, balanceBefore };
     }).reverse();
 
-    const trueStartingBalance = currentTempBalance; // El balance inicial real derivado
+    const trueStartingBalance = currentTempBalance;
 
     const now = Date.now();
     let startTimeForAll = profile?.created_at ? new Date(profile.created_at).getTime() : (chronologicalTxs.length > 0 ? new Date(chronologicalTxs[0].created_at).getTime() : now - 30 * 86400 * 1000);
@@ -235,7 +249,6 @@ export default function ProfilePage() {
     timestamps = Array.from(new Set(timestamps)).sort((a, b) => a - b);
 
     const data = timestamps.map(ts => {
-      // Balance líquido exacto en este milisegundo de la historia
       let liquidAtTs = trueStartingBalance;
       for (let i = 0; i < txsWithBalance.length; i++) {
         const txTime = new Date(txsWithBalance[i].created_at).getTime();
@@ -246,13 +259,17 @@ export default function ProfilePage() {
         }
       }
 
-      // Costo base de las inversiones que *actualmente* están activas
       let activeInvestmentAtTs = 0;
       bets.forEach(bet => {
         const betTime = new Date(bet.created_at || '').getTime();
-        if (betTime <= ts) {
+        if (betTime <= ts && isBetActive(bet)) {
           const market = getMarket(bet);
-          if (market && ACTIVE_STATUSES.includes(String(market.status).toLowerCase())) {
+          const opt = bet.option_details;
+          if (market && opt) {
+            // FIX MÁGICO: Ahora el gráfico lee el valor flotante actual de tus apuestas
+            // Esto incluye los +5.279 puntos de ganancia que estabas viendo!
+            activeInvestmentAtTs += calculatePositionValue(bet, market, opt);
+          } else {
             activeInvestmentAtTs += Number(bet.amount || 0);
           }
         }
@@ -262,7 +279,7 @@ export default function ProfilePage() {
     });
 
     return data;
-  }, [transactions, timeframe, profile, bets]);
+  }, [transactions, timeframe, profile, bets, isBetActive, calculatePositionValue]);
 
   const dynamicPnl = useMemo(() => {
     if (chartData.length < 2) return { value: 0, percentage: 0 };
@@ -441,7 +458,7 @@ export default function ProfilePage() {
               <TrendingUp className="w-6 h-6 text-muted-foreground mb-4 opacity-70" />
               <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1.5">Posiciones Activas</p>
               <p className="text-3xl font-black text-foreground">{portfolioStats.lockedValueOffset.toLocaleString()} pts</p>
-              <p className="text-xs font-semibold text-muted-foreground mt-1">{bets.filter(b => getMarket(b) && ACTIVE_STATUSES.includes(String(getMarket(b)!.status).toLowerCase())).length} Mercados</p>
+              <p className="text-xs font-semibold text-muted-foreground mt-1">{bets.filter(isBetActive).length} Mercados</p>
             </div>
 
             <div className="flex flex-col">
@@ -574,7 +591,7 @@ export default function ProfilePage() {
           <CardContent className="p-4 sm:p-6 md:p-8">
             <Tabs defaultValue="active" className="w-full">
               <TabsList className="grid w-full grid-cols-3 h-12 mb-8 bg-muted/50 rounded-lg p-1 border border-border/50">
-                <TabsTrigger value="active" className="flex items-center gap-2 text-xs sm:text-sm font-bold rounded-md"><LineChart className="w-4 h-4" /><span className="hidden sm:inline">Inversiones Activas</span><Badge variant="secondary" className="font-black h-5 px-1 ml-1 text-xs">{bets.filter(b => getMarket(b) && ACTIVE_STATUSES.includes(String(getMarket(b)!.status).toLowerCase())).length}</Badge></TabsTrigger>
+                <TabsTrigger value="active" className="flex items-center gap-2 text-xs sm:text-sm font-bold rounded-md"><LineChart className="w-4 h-4" /><span className="hidden sm:inline">Inversiones Activas</span><Badge variant="secondary" className="font-black h-5 px-1 ml-1 text-xs">{bets.filter(isBetActive).length}</Badge></TabsTrigger>
                 <TabsTrigger value="finished" className="flex items-center gap-2 text-xs sm:text-sm font-bold rounded-md"><History className="w-4 h-4" /><span className="hidden sm:inline">Finalizadas</span></TabsTrigger>
                 <TabsTrigger value="bank" className="flex items-center gap-2 text-xs sm:text-sm font-bold rounded-md"><Landmark className="w-4 h-4" /><span className="hidden sm:inline">Movimientos</span></TabsTrigger>
               </TabsList>
@@ -582,7 +599,7 @@ export default function ProfilePage() {
               <TabsContent value="active" className="space-y-6">
                 {isLoadingBets ? (
                   <div className="flex items-center justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-primary opacity-60" /></div>
-                ) : bets.filter((b) => getMarket(b) && ACTIVE_STATUSES.includes(String(getMarket(b)!.status).toLowerCase())).length === 0 ? (
+                ) : bets.filter(isBetActive).length === 0 ? (
                   <div className="p-16 text-center text-muted-foreground bg-muted/10 border-2 border-dashed border-border/50 rounded-2xl">
                     <LineChart className="w-16 h-16 mx-auto mb-5 opacity-20" />
                     <p className="text-xl font-bold mb-2 text-foreground">Tu portfolio activo está vacío</p>
@@ -592,7 +609,7 @@ export default function ProfilePage() {
                   </div>
                 ) : (
                   <div className="flex flex-col gap-6">
-                    {bets.filter((b) => getMarket(b) && ACTIVE_STATUSES.includes(String(getMarket(b)!.status).toLowerCase())).map((bet) => {
+                    {bets.filter(isBetActive).map((bet) => {
                       const market = getMarket(bet); const opt = bet.option_details;
                       const isOldBinary = bet.outcome === "yes" || bet.outcome === "no";
                       const displayOutcome = opt ? opt.option_name : (isOldBinary ? (bet.outcome === "yes" ? "SÍ" : "NO") : "Opción");
@@ -643,17 +660,20 @@ export default function ProfilePage() {
               </TabsContent>
 
               <TabsContent value="finished" className="space-y-4">
-                {bets.filter((b) => getMarket(b) && FINISHED_STATUSES.includes(String(getMarket(b)!.status).toLowerCase())).length === 0 ? (
+                {bets.filter(isBetFinished).length === 0 ? (
                   <div className="p-12 text-center text-muted-foreground"><History className="w-12 h-12 mx-auto mb-4 opacity-20" /><p>Aún no hay resultados de tus apuestas.</p></div>
                 ) : (
                   <div className="space-y-4">
-                    {bets.filter((b) => getMarket(b) && FINISHED_STATUSES.includes(String(getMarket(b)!.status).toLowerCase())).map((bet) => {
+                    {bets.filter(isBetFinished).map((bet) => {
                       const market = getMarket(bet); const opt = bet.option_details; const direction = (bet as any).direction || 'yes';
                       const displayOutcome = opt ? opt.option_name : 'Opción';
                       const isOptBinary = ['sí', 'si', 'yes', 'no'].includes(displayOutcome.toLowerCase());
                       let predictionText = isOptBinary ? (direction === 'no' ? (displayOutcome.toLowerCase().includes('s') ? 'No' : 'Sí') : displayOutcome) : `${direction === 'no' ? 'No' : 'Sí'} a ${displayOutcome}`;
                       const isEffectivelyNo = direction === 'no' || (isOptBinary && displayOutcome.toLowerCase() === 'no' && direction === 'yes');
-                      const won = (direction === 'yes' && market?.winning_outcome === bet.outcome) || (direction === 'no' && market?.winning_outcome !== bet.outcome && market?.winning_outcome !== null);
+
+                      const isBetLost = String(bet.status).toLowerCase() === 'lost';
+                      const isResolvedAndWon = market?.winning_outcome !== null && ((direction === 'yes' && market?.winning_outcome === bet.outcome) || (direction === 'no' && market?.winning_outcome !== bet.outcome));
+                      const won = !isBetLost && isResolvedAndWon;
 
                       return (
                         <div key={bet.id} className="rounded-xl border border-border/50 bg-muted/10 p-4 md:p-6 opacity-90">
