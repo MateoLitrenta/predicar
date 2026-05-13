@@ -924,7 +924,20 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
                       <span>Operar</span>
                     </div>
                   </div>
-                  {options.map((opt) => {
+                  {/* NUEVO ORDENAMIENTO:
+    1. Primero los activos, ordenados por porcentaje de mayor a menor.
+    2. Al final, los eliminados.
+*/}
+                  {[...options].sort((a, b) => {
+                    // Si uno está eliminado y el otro no, el eliminado va al final
+                    if (a.is_eliminated && !b.is_eliminated) return 1;
+                    if (!a.is_eliminated && b.is_eliminated) return -1;
+
+                    // Si ambos están activos, los ordenamos por probabilidad (de mayor a menor)
+                    const priceA = getOptionPrice(a.total_votes, a.is_eliminated);
+                    const priceB = getOptionPrice(b.total_votes, b.is_eliminated);
+                    return priceB - priceA;
+                  }).map((opt) => {
                     const yesPrice = getOptionPrice(opt.total_votes, opt.is_eliminated);
                     const yesCents = Math.round(yesPrice * 100);
                     const noCents = 100 - yesCents;
@@ -997,8 +1010,40 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
 
           </div>
 
-          <div className="lg:col-span-1 lg:sticky lg:top-24 w-full order-2">
-            <div className="rounded-2xl border border-border/50 bg-card shadow-xl overflow-hidden p-2 sm:p-3">
+          <div className={cn(
+            // COMPORTAMIENTO DESKTOP: Sticky a la derecha
+            "lg:col-span-1 lg:sticky lg:top-24 lg:w-full lg:order-2",
+            // COMPORTAMIENTO MOBILE: Bottom Sheet (solo si hay opción seleccionada o mercado resuelto)
+            (selectedOptionId || selectedSellPosition || isMarketResolved)
+              ? "fixed bottom-0 left-0 right-0 z-50 animate-in slide-in-from-bottom-full duration-300 lg:static lg:animate-none lg:z-auto"
+              : "w-full order-2"
+          )}>
+
+            {/* Overlay oscuro para mobile (solo visible cuando el panel emerge abajo) */}
+            <div
+              className={cn(
+                "fixed inset-0 bg-black/60 z-[-1] lg:hidden transition-opacity",
+                (selectedOptionId || selectedSellPosition) ? "opacity-100" : "opacity-0 pointer-events-none"
+              )}
+              onClick={() => {
+                // Al hacer clic fuera del panel, cerramos la operación en mobile
+                setSelectedOptionId(null);
+                setSelectedSellPosition(null);
+              }}
+            />
+
+            <div className={cn(
+              "border border-border/50 bg-card p-3 sm:p-4 shadow-2xl lg:shadow-xl",
+              (selectedOptionId || selectedSellPosition || isMarketResolved)
+                // Agregamos max-h-[85dvh] y overflow-y-auto para que se adapte al teclado
+                ? "rounded-t-3xl rounded-b-none lg:rounded-2xl max-h-[85dvh] overflow-y-auto pb-8 lg:pb-3"
+                : "rounded-2xl overflow-hidden"
+            )}>
+
+              {/* Barrita drag (solo decorativa para mobile) */}
+              {(selectedOptionId || selectedSellPosition) && (
+                <div className="w-12 h-1.5 bg-muted rounded-full mx-auto mb-4 lg:hidden" />
+              )}
 
               {isMarketResolved ? (
                 <div className="mb-2 p-6 text-center bg-primary/10 border border-primary/20 rounded-xl">
