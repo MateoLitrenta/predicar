@@ -59,7 +59,7 @@ interface AppNotification {
   id: string;
   title: string;
   message: string;
-  type: string;    
+  type: string;
   market_id?: string;
   is_read: boolean;
   created_at: string;
@@ -90,7 +90,7 @@ export function NavHeader({
   useEffect(() => {
     if (!userId) return;
     const supabase = createClient();
-    
+
     const fetchNotifications = async () => {
       const { data, error } = await supabase
         .from("notifications")
@@ -98,15 +98,15 @@ export function NavHeader({
         .eq("user_id", userId)
         .order("created_at", { ascending: false })
         .limit(15);
-        
+
       if (data && !error) {
         setNotifications(data as AppNotification[]);
         setUnreadCount(data.filter((n) => !n.is_read).length);
       }
     };
-    
+
     fetchNotifications();
-    
+
     const channel = supabase
       .channel("realtime-notifs")
       .on(
@@ -118,11 +118,11 @@ export function NavHeader({
             title: payload.new.title || "¡Nueva notificación!",
             description: payload.new.message || "Tenés una actualización en tu cuenta.",
           });
-          router.refresh(); 
+          router.refresh();
         }
       )
       .subscribe();
-      
+
     return () => { supabase.removeChannel(channel); };
   }, [userId, router]);
 
@@ -173,10 +173,10 @@ export function NavHeader({
 
   const handleDeleteNotification = async (e: React.MouseEvent, id: string) => {
     e.preventDefault();
-    e.stopPropagation(); 
-    
+    e.stopPropagation();
+
     setNotifications((prev) => prev.filter((n) => n.id !== id));
-    
+
     const { ok, error } = await deleteNotification(id);
     if (!ok) {
       toast({ title: "Error", description: "No se pudo borrar la notificación", variant: "destructive" });
@@ -190,7 +190,7 @@ export function NavHeader({
   };
 
   const getNotificationIcon = (type: string) => {
-    switch(type) {
+    switch (type) {
       case 'bonus': return <Gift className="w-5 h-5 text-green-500" />;
       case 'cashout': return <Coins className="w-5 h-5 text-amber-500" />;
       case 'market_resolved': return <Trophy className="w-5 h-5 text-primary" />;
@@ -209,47 +209,47 @@ export function NavHeader({
           <Badge variant="secondary" className="text-xs bg-primary/20 text-primary hover:bg-primary/30">{unreadCount} nuevas</Badge>
         )}
       </div>
-      
+
       <div className="overflow-y-auto overflow-x-hidden p-2 flex-1 scrollbar-thin scrollbar-thumb-border">
         {notifications.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-             <Bell className="w-10 h-10 mb-3 opacity-20" />
-             <p className="text-sm font-medium">No tenés notificaciones recientes</p>
+            <Bell className="w-10 h-10 mb-3 opacity-20" />
+            <p className="text-sm font-medium">No tenés notificaciones recientes</p>
           </div>
         ) : (
           <div className="flex flex-col gap-1.5">
             {notifications.map((notif) => (
-                <div 
-                  key={notif.id} 
-                  onClick={() => handleNotificationClick(notif)}
-                  className={cn(
-                    "relative group p-3 pr-10 rounded-xl text-sm transition-all w-full", 
-                    notif.market_id ? "cursor-pointer hover:bg-muted/50" : "cursor-default",
-                    notif.is_read ? "bg-transparent" : "bg-primary/5 border border-primary/20"
-                  )}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="mt-0.5 shrink-0 bg-muted/50 p-2 rounded-full border border-border/50">
-                       {getNotificationIcon(notif.type)}
-                    </div>
-                    
-                    <div className="flex-1 min-w-0">
-                      <p className="font-bold text-foreground mb-0.5 leading-snug">{notif.title}</p>
-                      <p className="text-foreground/80 leading-snug text-xs whitespace-pre-wrap break-words">{notif.message}</p>
-                      <p className="text-[10px] font-semibold text-muted-foreground mt-2 uppercase tracking-wider">
-                        {new Date(notif.created_at).toLocaleDateString("es-AR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
-                      </p>
-                    </div>
+              <div
+                key={notif.id}
+                onClick={() => handleNotificationClick(notif)}
+                className={cn(
+                  "relative group p-3 pr-10 rounded-xl text-sm transition-all w-full",
+                  notif.market_id ? "cursor-pointer hover:bg-muted/50" : "cursor-default",
+                  notif.is_read ? "bg-transparent" : "bg-primary/5 border border-primary/20"
+                )}
+              >
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 shrink-0 bg-muted/50 p-2 rounded-full border border-border/50">
+                    {getNotificationIcon(notif.type)}
                   </div>
-                  
-                  <button
-                    onClick={(e) => handleDeleteNotification(e, notif.id)}
-                    className="absolute top-3 right-2 p-1.5 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-red-500 hover:bg-red-500/10 rounded-md transition-all"
-                    title="Eliminar"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-foreground mb-0.5 leading-snug">{notif.title}</p>
+                    <p className="text-foreground/80 leading-snug text-xs whitespace-pre-wrap break-words">{notif.message}</p>
+                    <p className="text-[10px] font-semibold text-muted-foreground mt-2 uppercase tracking-wider">
+                      {new Date(notif.created_at).toLocaleDateString("es-AR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                    </p>
+                  </div>
                 </div>
+
+                <button
+                  onClick={(e) => handleDeleteNotification(e, notif.id)}
+                  className="absolute top-3 right-2 p-1.5 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-red-500 hover:bg-red-500/10 rounded-md transition-all"
+                  title="Eliminar"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
             ))}
           </div>
         )}
@@ -261,7 +261,7 @@ export function NavHeader({
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
-          
+
           <Link href="/" className="flex items-center hover:opacity-90 transition-opacity py-2 group mr-4">
             <div className="flex items-baseline">
               <span className="text-2xl sm:text-3xl font-black tracking-tighter text-foreground">
@@ -271,9 +271,9 @@ export function NavHeader({
                 <span className="text-2xl sm:text-3xl font-black tracking-tighter text-amber-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.3)]">
                   X
                 </span>
-                <TrendingUp 
-                  className="absolute -top-2.5 -right-5 w-6 h-6 text-amber-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.4)] group-hover:-translate-y-1 group-hover:translate-x-1 transition-transform duration-300" 
-                  strokeWidth={3} 
+                <TrendingUp
+                  className="absolute -top-2.5 -right-5 w-6 h-6 text-amber-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.4)] group-hover:-translate-y-1 group-hover:translate-x-1 transition-transform duration-300"
+                  strokeWidth={3}
                 />
               </div>
             </div>
@@ -365,7 +365,7 @@ export function NavHeader({
                 <span className="font-semibold text-sm">{(points || 0).toLocaleString()}</span>
               </div>
             )}
-            
+
             {userId && (
               <Popover onOpenChange={handleOpenNotifications}>
                 <PopoverTrigger asChild>
@@ -392,76 +392,83 @@ export function NavHeader({
       </div>
 
       {showMobileMenu && (
-        <div className="md:hidden absolute top-full left-0 w-full bg-background/95 backdrop-blur-xl border-b border-border/50 shadow-2xl overflow-hidden animate-in slide-in-from-top-2 duration-200 z-50">
-          <div className="p-4 space-y-4">
-            
-            {userId ? (
-              <div className="flex items-center gap-4 p-4 rounded-2xl bg-muted/30 border border-border/50">
-                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30 shrink-0">
-                  <User className="w-6 h-6 text-primary" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-base font-bold text-foreground truncate">{getUserDisplayName()}</p>
-                  <p className="text-sm font-medium text-amber-500 mt-0.5">{points.toLocaleString()} pts disponibles</p>
-                </div>
-              </div>
-            ) : (
-              <Button onClick={() => { setShowMobileMenu(false); onOpenAuthModal(); }} className="w-full h-12 text-base font-bold rounded-xl shadow-md">
-                <User className="w-5 h-5 mr-2" /> Ingresar / Registrarse
-              </Button>
-            )}
-            
-            <div className="grid grid-cols-2 gap-3">
-              <Button variant="outline" className="h-16 flex flex-col items-center justify-center gap-1 border-border/50 hover:bg-muted/50 rounded-xl bg-card" asChild>
-                <Link href="/ranking" onClick={() => setShowMobileMenu(false)}>
-                  <Trophy className="w-5 h-5 text-amber-500" />
-                  <span className="text-xs font-semibold mt-1">Ranking Global</span>
-                </Link>
-              </Button>
+        <>
+          {/* OVERLAY LIBERADO: absolute y h-[100dvh] para que cubra toda la pantalla hacia abajo */}
+          <div
+            className="md:hidden absolute top-full left-0 w-screen h-[100dvh] bg-black/20 backdrop-blur-sm z-40 cursor-pointer animate-in fade-in duration-200"
+            onClick={() => setShowMobileMenu(false)}
+          />
 
-              <Button onClick={userId ? handleClaimBonus : onOpenAuthModal} disabled={isClaimingBonus} variant="outline" className={cn("h-16 flex flex-col items-center justify-center gap-1 border-border/50 rounded-xl bg-card", bonusClaimed && "border-green-500/50 bg-green-500/10")}>
-                {isClaimingBonus ? <Loader2 className="w-5 h-5 animate-spin" /> : <Gift className={cn("w-5 h-5", bonusClaimed ? "text-green-500" : "text-primary")} />}
-                <span className="text-xs font-semibold mt-1">{bonusClaimed ? "¡Reclamado!" : "Bonus Diario"}</span>
-              </Button>
-            </div>
+          <div className="md:hidden absolute top-full left-0 w-full bg-background/95 backdrop-blur-xl border-b border-border/50 shadow-2xl overflow-hidden animate-in slide-in-from-top-2 duration-200 z-50">
+            <div className="p-4 space-y-4">
 
-            {userId && (
-              <div className="space-y-1 bg-muted/10 p-2 rounded-2xl border border-border/50">
-                <Button variant="ghost" className="w-full justify-start h-12 rounded-xl" asChild>
-                  <Link href="/profile" onClick={() => setShowMobileMenu(false)}>
-                    <UserCircle className="w-5 h-5 mr-3 text-muted-foreground" />
-                    <span className="text-sm font-medium">Mi Perfil (Portfolio)</span>
+              {userId ? (
+                <div className="flex items-center gap-4 p-4 rounded-2xl bg-muted/30 border border-border/50">
+                  <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30 shrink-0">
+                    <User className="w-6 h-6 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-base font-bold text-foreground truncate">{getUserDisplayName()}</p>
+                    <p className="text-sm font-medium text-amber-500 mt-0.5">{points.toLocaleString()} pts disponibles</p>
+                  </div>
+                </div>
+              ) : (
+                <Button onClick={() => { setShowMobileMenu(false); onOpenAuthModal(); }} className="w-full h-12 text-base font-bold rounded-xl shadow-md">
+                  <User className="w-5 h-5 mr-2" /> Ingresar / Registrarse
+                </Button>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <Button variant="outline" className="h-16 flex flex-col items-center justify-center gap-1 border-border/50 hover:bg-muted/50 rounded-xl bg-card" asChild>
+                  <Link href="/ranking" onClick={() => setShowMobileMenu(false)}>
+                    <Trophy className="w-5 h-5 text-amber-500" />
+                    <span className="text-xs font-semibold mt-1">Ranking Global</span>
                   </Link>
                 </Button>
-                
-                {isAdmin && (
-                  <Button variant="ghost" className="w-full justify-start h-12 rounded-xl" asChild>
-                    <Link href="/admin" onClick={() => setShowMobileMenu(false)}>
-                      <ShieldCheck className="w-5 h-5 mr-3 text-amber-500" />
-                      <span className="text-sm font-medium">Panel de Control</span>
-                    </Link>
-                  </Button>
-                )}
 
-                <div className="flex items-center justify-between px-4 py-2 my-1 border-y border-border/30">
-                  <div className="flex items-center gap-3">
-                    {isDarkMode ? <Moon className="w-5 h-5 text-muted-foreground" /> : <Sun className="w-5 h-5 text-muted-foreground" />}
-                    <span className="text-sm font-medium">Modo Oscuro</span>
-                  </div>
-                  <Button variant="ghost" size="icon" onClick={onToggleDarkMode} className="rounded-full h-8 w-8 bg-background border border-border/50 shadow-sm">
-                    {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-                  </Button>
-                </div>
-
-                <Button onClick={() => { setShowMobileMenu(false); onSignOut(); }} variant="ghost" className="w-full justify-start h-12 text-red-500 hover:text-red-600 hover:bg-red-500/10 rounded-xl mt-1">
-                  <LogOut className="w-5 h-5 mr-3" />
-                  <span className="text-sm font-bold">Cerrar Sesión</span>
+                <Button onClick={userId ? handleClaimBonus : onOpenAuthModal} disabled={isClaimingBonus} variant="outline" className={cn("h-16 flex flex-col items-center justify-center gap-1 border-border/50 rounded-xl bg-card", bonusClaimed && "border-green-500/50 bg-green-500/10")}>
+                  {isClaimingBonus ? <Loader2 className="w-5 h-5 animate-spin" /> : <Gift className={cn("w-5 h-5", bonusClaimed ? "text-green-500" : "text-primary")} />}
+                  <span className="text-xs font-semibold mt-1">{bonusClaimed ? "¡Reclamado!" : "Bonus Diario"}</span>
                 </Button>
               </div>
-            )}
-            
+
+              {userId && (
+                <div className="space-y-1 bg-muted/10 p-2 rounded-2xl border border-border/50">
+                  <Button variant="ghost" className="w-full justify-start h-12 rounded-xl" asChild>
+                    <Link href="/profile" onClick={() => setShowMobileMenu(false)}>
+                      <UserCircle className="w-5 h-5 mr-3 text-muted-foreground" />
+                      <span className="text-sm font-medium">Mi Perfil (Portfolio)</span>
+                    </Link>
+                  </Button>
+
+                  {isAdmin && (
+                    <Button variant="ghost" className="w-full justify-start h-12 rounded-xl" asChild>
+                      <Link href="/admin" onClick={() => setShowMobileMenu(false)}>
+                        <ShieldCheck className="w-5 h-5 mr-3 text-amber-500" />
+                        <span className="text-sm font-medium">Panel de Control</span>
+                      </Link>
+                    </Button>
+                  )}
+
+                  <div className="flex items-center justify-between px-4 py-2 my-1 border-y border-border/30">
+                    <div className="flex items-center gap-3">
+                      {isDarkMode ? <Moon className="w-5 h-5 text-muted-foreground" /> : <Sun className="w-5 h-5 text-muted-foreground" />}
+                      <span className="text-sm font-medium">Modo Oscuro</span>
+                    </div>
+                    <Button variant="ghost" size="icon" onClick={onToggleDarkMode} className="rounded-full h-8 w-8 bg-background border border-border/50 shadow-sm">
+                      {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                    </Button>
+                  </div>
+
+                  <Button onClick={() => { setShowMobileMenu(false); onSignOut(); }} variant="ghost" className="w-full justify-start h-12 text-red-500 hover:text-red-600 hover:bg-red-500/10 rounded-xl mt-1">
+                    <LogOut className="w-5 h-5 mr-3" />
+                    <span className="text-sm font-bold">Cerrar Sesión</span>
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        </>
       )}
     </header>
   );

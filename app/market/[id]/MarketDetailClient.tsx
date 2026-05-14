@@ -1010,37 +1010,35 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
 
           </div>
 
-          <div className={cn(
-            // COMPORTAMIENTO DESKTOP: Sticky a la derecha
-            "lg:col-span-1 lg:sticky lg:top-24 lg:w-full lg:order-2",
-            // COMPORTAMIENTO MOBILE: Bottom Sheet (solo si hay opción seleccionada o mercado resuelto)
-            (selectedOptionId || selectedSellPosition || isMarketResolved)
-              ? "fixed bottom-0 left-0 right-0 z-50 animate-in slide-in-from-bottom-full duration-300 lg:static lg:animate-none lg:z-auto"
-              : "w-full order-2"
-          )}>
-
-            {/* Overlay oscuro para mobile (solo visible cuando el panel emerge abajo) */}
+          {/* NUEVO OVERLAY: 100% separado del contenedor del panel. z-40 para tapar todo menos el panel */}
+          {(selectedOptionId || selectedSellPosition) && (
             <div
-              className={cn(
-                "fixed inset-0 bg-black/60 z-[-1] lg:hidden transition-opacity",
-                (selectedOptionId || selectedSellPosition) ? "opacity-100" : "opacity-0 pointer-events-none"
-              )}
-              onClick={() => {
-                // Al hacer clic fuera del panel, cerramos la operación en mobile
+              className="fixed inset-0 bg-black/60 z-40 lg:hidden animate-in fade-in duration-300"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 setSelectedOptionId(null);
                 setSelectedSellPosition(null);
               }}
             />
+          )}
+
+          {/* CONTENEDOR DEL PANEL DE APUESTAS: z-50 para estar arriba del overlay */}
+          <div className={cn(
+            "lg:col-span-1 lg:sticky lg:top-24 lg:w-full lg:order-2",
+            (selectedOptionId || selectedSellPosition || isMarketResolved)
+              ? "fixed bottom-0 left-0 right-0 z-50 animate-in slide-in-from-bottom duration-300 lg:static lg:animate-none lg:z-auto"
+              : "w-full order-2"
+          )}>
 
             <div className={cn(
               "border border-border/50 bg-card p-3 sm:p-4 shadow-2xl lg:shadow-xl",
               (selectedOptionId || selectedSellPosition || isMarketResolved)
-                // Agregamos max-h-[85dvh] y overflow-y-auto para que se adapte al teclado
                 ? "rounded-t-3xl rounded-b-none lg:rounded-2xl max-h-[85dvh] overflow-y-auto pb-8 lg:pb-3"
                 : "rounded-2xl overflow-hidden"
             )}>
 
-              {/* Barrita drag (solo decorativa para mobile) */}
+              {/* Barrita drag decorativa */}
               {(selectedOptionId || selectedSellPosition) && (
                 <div className="w-12 h-1.5 bg-muted rounded-full mx-auto mb-4 lg:hidden" />
               )}
