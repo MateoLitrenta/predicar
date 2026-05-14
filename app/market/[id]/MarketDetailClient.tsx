@@ -376,7 +376,12 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
       }
 
       toast({ title: "¡Orden ejecutada!", description: `Compraste acciones ${directionText} ${optionName}` });
+
+      // --- CERRAR EL PANEL AUTOMÁTICAMENTE ---
       setBetAmount("");
+      setSelectedOptionId(null);
+      setSelectedSellPosition(null);
+
       fetchUserAndProfile();
       fetchUserBets();
       fetchData();
@@ -402,8 +407,12 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
       toast({ title: "Error al vender", description: error || "Hubo un problema", variant: "destructive" });
     } else {
       toast({ title: "¡Venta exitosa!", description: `Recibiste +${cashoutValue?.toLocaleString()} pts.` });
+
+      // --- CERRAR EL PANEL AUTOMÁTICAMENTE ---
       setSellSharesInput("");
       setSelectedSellPosition(null);
+      setSelectedOptionId(null);
+
       fetchUserAndProfile();
       fetchUserBets();
       fetchData();
@@ -576,6 +585,7 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
       .sort((a, b) => b.invested - a.invested)
       .slice(0, 5);
   }, [activityFeed, options]); // Clave: agregar 'options' a las dependencias
+
   const orderSummary = useMemo(() => {
     if (!selectedOptionId || !betAmount || isNaN(Number(betAmount)) || Number(betAmount) <= 0) return null;
     const amount = Number(betAmount);
@@ -1010,519 +1020,521 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
 
           </div>
 
-          {/* NUEVO OVERLAY: 100% separado del contenedor del panel. z-40 para tapar todo menos el panel */}
-          {(selectedOptionId || selectedSellPosition) && (
-            <div
-              className="fixed inset-0 bg-black/60 z-40 lg:hidden animate-in fade-in duration-300"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setSelectedOptionId(null);
-                setSelectedSellPosition(null);
-              }}
-            />
-          )}
-
-          {/* CONTENEDOR DEL PANEL DE APUESTAS: z-50 para estar arriba del overlay */}
-          <div className={cn(
-            "lg:col-span-1 lg:sticky lg:top-24 lg:w-full lg:order-2",
-            (selectedOptionId || selectedSellPosition || isMarketResolved)
-              ? "fixed bottom-0 left-0 right-0 z-50 animate-in slide-in-from-bottom duration-300 lg:static lg:animate-none lg:z-auto"
-              : "w-full order-2"
-          )}>
-
-            <div className={cn(
-              "border border-border/50 bg-card p-3 sm:p-4 shadow-2xl lg:shadow-xl",
-              (selectedOptionId || selectedSellPosition || isMarketResolved)
-                ? "rounded-t-3xl rounded-b-none lg:rounded-2xl max-h-[85dvh] overflow-y-auto pb-8 lg:pb-3"
-                : "rounded-2xl overflow-hidden"
-            )}>
-
-              {/* Barrita drag decorativa */}
-              {(selectedOptionId || selectedSellPosition) && (
-                <div className="w-12 h-1.5 bg-muted rounded-full mx-auto mb-4 lg:hidden" />
-              )}
-
-              {isMarketResolved ? (
-                <div className="mb-2 p-6 text-center bg-primary/10 border border-primary/20 rounded-xl">
-                  <Trophy className="w-12 h-12 text-primary mx-auto mb-3 drop-shadow-md" />
-                  <h3 className="text-xl font-black text-primary mb-1">MERCADO RESUELTO</h3>
-                  <p className="text-sm font-medium text-muted-foreground mb-4">La opción ganadora fue:</p>
-                  <Badge className="text-lg px-4 py-1.5 font-black bg-background text-foreground border-2 border-primary/50 shadow-sm">
-                    {winningOption?.option_name || 'Desconocido'}
-                  </Badge>
-                  <p className="text-xs text-muted-foreground mt-4">Los puntos ya fueron distribuidos a las carteras de los ganadores.</p>
-                </div>
-              ) : (
-                <Tabs value={tradeTab} onValueChange={setTradeTab} className="w-full">
-                  <TabsList className="grid w-full grid-cols-2 h-12 p-1 bg-muted/50 rounded-xl mb-4">
-                    <TabsTrigger value="buy" className="rounded-lg text-sm sm:text-base font-bold data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm transition-all text-muted-foreground">
-                      Comprar
-                    </TabsTrigger>
-                    <TabsTrigger value="sell" className="rounded-lg text-sm sm:text-base font-bold data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm transition-all text-muted-foreground">
-                      Vender
-                    </TabsTrigger>
-                  </TabsList>
-
-                  {isMarketClosed && !isMarketResolved && (
-                    <div className="mb-4 mx-2 p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-2 text-red-500">
-                      <Lock className="w-4 h-4 mt-0.5 shrink-0" />
-                      <p className="text-xs font-medium leading-relaxed">
-                        Este mercado ya cerró y las operaciones están bloqueadas. Los puntos de las apuestas ganadoras se repartirán cuando el administrador confirme el resultado final.
-                      </p>
-                    </div>
-                  )}
-
-                  <TabsContent value="buy" className="p-2 sm:p-3 mt-0">
-                    <div className="flex flex-col gap-4">
-                      {!selectedOptionId ? (
-                        <div className="p-6 text-center border-2 border-dashed border-border/50 rounded-xl bg-muted/10">
-                          <TrendingUp className="w-8 h-8 mx-auto mb-2 text-muted-foreground opacity-50" />
-                          <p className="text-sm font-medium text-muted-foreground">Seleccioná tu predicción para operar.</p>
-                        </div>
-                      ) : (
-                        <>
-                          <div className={cn("p-4 rounded-xl border", !isRedTheme ? 'border-green-500/40 bg-green-500/10' : 'border-red-500/40 bg-red-500/10')}>
-                            <p className={cn("text-xs font-bold uppercase mb-1 opacity-90", !isRedTheme ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400')}>Estás comprando</p>
-                            <div className="flex justify-between items-center">
-                              <span className={cn("font-black text-lg sm:text-xl", !isRedTheme ? 'text-green-700 dark:text-green-500' : 'text-red-700 dark:text-red-500')}>
-                                {isBinaryYesNo ? `Comprar ${selectedOptName}` : `Comprar ${selectedDirection === 'yes' ? 'Sí' : 'No'}`}
-                              </span>
-                              <span className={cn("font-bold text-xl", !isRedTheme ? 'text-green-700 dark:text-green-500' : 'text-red-700 dark:text-red-500')}>
-                                {selectedDirection === 'yes'
-                                  ? Math.round(getOptionPrice(options.find(o => o.id === selectedOptionId)?.total_votes, options.find(o => o.id === selectedOptionId)?.is_eliminated) * 100)
-                                  : 100 - Math.round(getOptionPrice(options.find(o => o.id === selectedOptionId)?.total_votes, options.find(o => o.id === selectedOptionId)?.is_eliminated) * 100)}¢
-                              </span>
-                            </div>
-                            {!isBinaryYesNo && <p className="text-sm font-medium mt-1 truncate text-foreground">{selectedOptName}</p>}
-                          </div>
-
-                          {options.find(o => o.id === selectedOptionId)?.is_eliminated ? (
-                            <div className="p-6 text-center border border-red-500/30 rounded-xl bg-red-500/5">
-                              <AlertCircle className="w-8 h-8 mx-auto mb-2 text-red-500 opacity-80" />
-                              <p className="text-sm font-bold text-red-500">Opción Eliminada</p>
-                              <p className="text-xs text-muted-foreground mt-1">Ya no se pueden comprar acciones de este resultado.</p>
-                            </div>
-                          ) : (
-                            <>
-                              <div>
-                                <div className="flex justify-between items-center mb-1.5">
-                                  <Label className="text-muted-foreground">Monto a invertir</Label>
-                                  {user && (
-                                    <button
-                                      onClick={() => setBetAmount(profile?.points?.toString() || "0")}
-                                      className="text-[10px] font-bold uppercase tracking-wider text-primary hover:text-primary/80 transition-colors bg-primary/10 px-2 py-0.5 rounded-full"
-                                    >
-                                      MAX
-                                    </button>
-                                  )}
-                                </div>
-                                <div className="relative">
-                                  <Input type="number" placeholder="0" value={betAmount} onChange={(e) => setBetAmount(e.target.value)} disabled={isMarketClosed} className="pl-4 pr-12 h-14 text-xl font-bold bg-muted/20 border-border/50 focus-visible:ring-1 focus-visible:ring-primary/50 disabled:opacity-50" />
-                                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground font-bold">pts</span>
-                                </div>
-                              </div>
-
-                              {orderSummary && (
-                                <div className="p-4 rounded-xl bg-muted/20 border border-border/50 space-y-3">
-                                  <div className="flex justify-between items-center w-full mb-3 text-sm">
-                                    <span className="text-muted-foreground whitespace-nowrap mr-2">Precio promedio</span>
-                                    <div className="flex items-center gap-2 text-right whitespace-nowrap">
-                                      <span className="font-bold">{orderSummary.avgPriceCents}¢</span>
-                                    </div>
-                                  </div>
-                                  <div className="flex justify-between items-center w-full mb-3 text-sm">
-                                    <span className="text-muted-foreground whitespace-nowrap mr-2">Acciones estimadas</span>
-                                    <div className="flex items-center gap-2 text-right whitespace-nowrap">
-                                      <span className="font-bold">{orderSummary.shares.toLocaleString()}</span>
-                                    </div>
-                                  </div>
-
-                                  <div className="h-px w-full bg-border/50 my-2" />
-
-                                  <div className="flex justify-between items-center w-full mb-3 text-sm">
-                                    <span className="text-muted-foreground whitespace-nowrap mr-2">Ganancia Potencial</span>
-                                    <div className="flex items-center gap-2 text-right whitespace-nowrap">
-                                      <span className={cn("font-bold", !isRedTheme ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400")}>+{orderSummary.potentialProfit.toLocaleString()} pts</span>
-                                      <span className={cn("text-[10px] px-1.5 py-0.5 rounded-md", !isRedTheme ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400")}>+{orderSummary.roi.toFixed(1)}%</span>
-                                    </div>
-                                  </div>
-                                  <div className="flex justify-between items-center w-full mb-3 text-base">
-                                    <span className="font-bold text-foreground whitespace-nowrap mr-2">Retorno Total</span>
-                                    <div className="flex items-center gap-2 text-right whitespace-nowrap">
-                                      <span className={cn("font-black", !isRedTheme ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400")}>{orderSummary.potentialPayout.toLocaleString()} pts</span>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-
-                              {orderSummary && orderSummary.slippage > 3 && (
-                                <div className="px-3 py-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg flex items-start gap-2 text-yellow-600 dark:text-yellow-500 animate-in fade-in">
-                                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                                  <p className="text-[11px] font-medium leading-tight">
-                                    ⚠️ Deslizamiento alto ({orderSummary.slippage.toFixed(1)}%). Tu orden mueve la liquidez y el precio promedio será superior al inicial.
-                                  </p>
-                                </div>
-                              )}
-
-                              {user && (
-                                <div className="flex justify-between items-center text-xs text-muted-foreground px-1">
-                                  <span>Balance disponible:</span>
-                                  <span className="font-bold text-foreground">{(profile?.points || 0).toLocaleString()} pts</span>
-                                </div>
-                              )}
-
-                              <Button
-                                size="lg"
-                                disabled={!betAmount || isPlacingBet || isMarketClosed}
-                                onClick={handlePlaceBet}
-                                className={cn(
-                                  "w-full text-sm font-bold h-12 transition-colors mt-2",
-                                  isMarketClosed ? "bg-muted text-muted-foreground" :
-                                    (!isRedTheme ? "bg-green-600 hover:bg-green-700 text-white dark:bg-green-500 dark:hover:bg-green-600 dark:text-black" : "bg-red-600 hover:bg-red-700 text-white dark:bg-red-500 dark:hover:bg-red-600 dark:text-black")
-                                )}
-                              >
-                                <span className="truncate w-full text-center">
-                                  {isMarketClosed ? <><Lock className="w-4 h-4 mr-2 inline-block" /> Mercado Cerrado</> :
-                                    isPlacingBet ? <><Loader2 className="w-4 h-4 mr-2 animate-spin inline-block" /> Procesando...</> :
-                                      !user ? "Ingresar para Operar" :
-                                        `Comprar ${isBinaryYesNo ? (selectedDirection === 'yes' ? 'Sí' : 'No') : selectedOptName} por ${betAmount || 0} pts`}
-                                </span>
-                              </Button>
-                            </>
-                          )}
-
-                          {marketPositionSummary && (
-                            <div className="mt-4 p-4 bg-background border border-border/50 rounded-xl space-y-2 animate-in fade-in">
-                              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1.5"><Wallet className="w-3 h-3" /> Resumen de tus posiciones</p>
-                              <div className="flex justify-between items-center">
-                                <span className="text-sm font-medium text-foreground">Total Invertido</span>
-                                <span className="text-sm font-bold text-foreground">{marketPositionSummary.totalInvested.toLocaleString()} pts</span>
-                              </div>
-                              <div className="flex justify-between items-center">
-                                <span className="text-sm font-medium text-foreground">Valor Actual</span>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm font-bold text-primary">{marketPositionSummary.totalCurrentValue.toLocaleString()} pts</span>
-                                  <Badge variant="outline" className={cn("text-[10px] font-bold px-1.5 py-0 h-5 border", marketPositionSummary.pnl >= 0 ? "bg-green-500/10 text-green-600 border-green-500/30" : "bg-red-500/10 text-red-600 border-red-500/30")}>
-                                    {marketPositionSummary.pnl >= 0 ? '+' : ''}{marketPositionSummary.pnlPct.toFixed(1)}%
-                                  </Badge>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-
-                        </>
-                      )}
-                    </div>
-                  </TabsContent>
-
-                  <TabsContent value="sell" className="p-2 sm:p-3 mt-0">
-                    {!user ? (
-                      <div className="text-center py-8"><p className="text-muted-foreground text-sm mb-4">Iniciá sesión para ver tu portfolio.</p><Button onClick={() => setIsAuthModalOpen(true)}>Ingresar</Button></div>
-                    ) : consolidatedPositions.length === 0 ? (
-                      <div className="p-6 text-center border-2 border-dashed border-border/50 rounded-xl bg-muted/10"><Layers className="w-8 h-8 mx-auto mb-2 text-muted-foreground opacity-50" /><p className="text-sm font-medium text-muted-foreground">No tenés posiciones activas en este mercado.</p></div>
-                    ) : (
-                      <div className="space-y-4">
-                        {!selectedSellPosition ? (
-                          <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1.5"><Layers className="w-3 h-3" /> Selecciona qué liquidar</p>
-                            {consolidatedPositions.map(pos => {
-                              const opt = options.find(o => o.id === pos.outcome);
-                              const cashoutVal = calculatePartialCashout(pos.outcome, pos.direction, pos.totalShares);
-                              const pnl = cashoutVal - pos.totalInvested;
-                              const pnlPct = (pnl / pos.totalInvested) * 100;
-                              const isRed = pos.direction === 'no' || (isBinaryYesNo && opt?.option_name.toLowerCase() === 'no');
-
-                              return (
-                                <div key={`${pos.outcome}-${pos.direction}`} className={cn("p-4 rounded-xl border border-border/50 bg-card hover:bg-muted/30 cursor-pointer transition-colors", isMarketClosed && "opacity-75")} onClick={() => { if (!isMarketClosed) setSelectedSellPosition(`${pos.outcome}|${pos.direction}`) }}>
-                                  <div className="flex justify-between items-start mb-3">
-                                    <div>
-                                      <p className="font-bold text-foreground">
-                                        {isBinaryYesNo ? (
-                                          <span className={cn("mr-1", isRed ? "text-red-600 dark:text-red-500" : "text-green-600 dark:text-green-500")}>{opt?.option_name}</span>
-                                        ) : (
-                                          <><span className={cn("mr-1", isRed ? "text-red-600 dark:text-red-500" : "text-green-600 dark:text-green-500")}>{pos.direction === 'no' ? 'No' : 'Sí'}</span> a {opt?.option_name || "Opción"}</>
-                                        )}
-                                      </p>
-                                      <p className="text-xs text-muted-foreground font-medium mt-0.5">{Math.round(pos.totalShares).toLocaleString()} acciones</p>
-                                    </div>
-                                    <Badge variant="outline" className={cn("font-bold border", pnl >= 0 ? "bg-green-500/10 text-green-600 dark:text-green-500 border-green-500/30" : "bg-red-500/10 text-red-600 dark:text-red-500 border-red-500/30")}>{pnl >= 0 ? "+" : ""}{pnlPct.toFixed(1)}%</Badge>
-                                  </div>
-                                  <div className="flex justify-between items-center text-sm pt-2 border-t border-border/50">
-                                    <span className="text-muted-foreground">Valor Actual:</span>
-                                    <span className="font-bold text-primary">{cashoutVal.toLocaleString()} pts</span>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <div className="space-y-4 animate-in slide-in-from-right-4">
-                            {(() => {
-                              const [optId, dir] = selectedSellPosition.split('|');
-                              const opt = options.find(o => o.id === optId);
-                              const pos = consolidatedPositions.find(p => p.outcome === optId && p.direction === dir);
-                              if (!pos) return null;
-
-                              const sharesToSell = parseFloat(sellSharesInput) || 0;
-                              const isValidSell = sharesToSell > 0 && sharesToSell <= pos.totalShares;
-                              const expectedReturn = isValidSell ? calculatePartialCashout(optId, dir, sharesToSell) : 0;
-                              const isRed = dir === 'no' || (isBinaryYesNo && opt?.option_name.toLowerCase() === 'no');
-
-                              return (
-                                <>
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <button onClick={() => { setSelectedSellPosition(null); setSellSharesInput(""); }} className="p-1 hover:bg-muted rounded text-muted-foreground"><ArrowLeft className="w-4 h-4" /></button>
-                                    <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Configurar Venta</p>
-                                  </div>
-
-                                  <div className={cn("p-4 rounded-xl border", !isRed ? 'border-green-500/30 bg-green-500/5' : 'border-red-500/30 bg-red-500/5')}>
-                                    <p className="text-sm font-black text-foreground">{isBinaryYesNo ? opt?.option_name : `${dir === 'yes' ? 'Sí' : 'No'} a ${opt?.option_name}`}</p>
-                                    <p className="text-xs font-medium text-muted-foreground mt-1">Disponibles: <span className="font-bold text-foreground">{Math.round(pos.totalShares).toLocaleString()} acciones</span></p>
-                                  </div>
-
-                                  <div>
-                                    <div className="flex justify-between items-center mb-1.5">
-                                      <Label className="text-muted-foreground">Acciones a liquidar</Label>
-                                      <button onClick={() => setSellSharesInput(pos.totalShares.toString())} className="text-[10px] font-bold uppercase tracking-wider text-primary hover:text-primary/80 transition-colors bg-primary/10 px-2 py-0.5 rounded-full">MAX</button>
-                                    </div>
-                                    <Input type="number" placeholder="0" value={sellSharesInput} onChange={(e) => setSellSharesInput(e.target.value)} max={pos.totalShares} className="h-14 text-xl font-bold bg-muted/20 border-border/50 focus-visible:ring-primary/50" />
-                                  </div>
-
-                                  <div className="p-4 rounded-xl bg-background border border-border/50">
-                                    <div className="flex justify-between items-center w-full text-base">
-                                      <span className="font-bold text-foreground whitespace-nowrap mr-2">Retorno Estimado</span>
-                                      <span className="font-black text-primary">{expectedReturn.toLocaleString()} pts</span>
-                                    </div>
-                                  </div>
-
-                                  <Button size="lg" className="w-full h-12 font-bold bg-secondary hover:bg-secondary/80 text-secondary-foreground mt-2" onClick={executeSellShares} disabled={!isValidSell || isSelling || isMarketClosed}>
-                                    {isMarketClosed ? <><Lock className="w-4 h-4 mr-2" /> Bloqueado</> : isSelling ? <Loader2 className="w-4 h-4 animate-spin" /> : isValidSell ? `Liquidar por ${expectedReturn} pts` : "Ingresar cantidad"}
-                                  </Button>
-                                </>
-                              );
-                            })()}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </TabsContent>
-                </Tabs>
-              )}
-            </div>
-
-            <div className="hidden lg:block mt-6">
-              {TopHoldersBlock}
-            </div>
-
+          <div className="hidden lg:block mt-6">
+            {TopHoldersBlock}
           </div>
 
-          <div className="block lg:hidden w-full order-3 mt-2">{TopHoldersBlock}</div>
-
-          <div className="lg:col-span-2 w-full order-4 lg:order-4 mt-6">
-            <Tabs defaultValue="activity" className="w-full">
-              <TabsList className="w-full justify-start border-b border-border/50 rounded-none bg-transparent h-auto p-0 mb-6 gap-6 overflow-x-auto">
-                <TabsTrigger
-                  value="activity"
-                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent px-0 py-3 text-base font-bold text-muted-foreground hover:text-foreground transition-all whitespace-nowrap"
-                >
-                  <TrendingUp className="w-4 h-4 mr-2" /> Actividad Reciente
-                </TabsTrigger>
-                <TabsTrigger
-                  value="debate"
-                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent px-0 py-3 text-base font-bold text-muted-foreground hover:text-foreground transition-all whitespace-nowrap"
-                >
-                  <MessageSquare className="w-4 h-4 mr-2" /> Debate ({comments.length})
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="activity" className="m-0 focus-visible:outline-none">
-                <div className="rounded-xl border border-border/50 bg-card overflow-hidden shadow-sm">
-                  {activityFeed.length === 0 ? (
-                    <div className="text-center py-12 border-2 border-dashed border-border/50 rounded-xl bg-muted/10 mx-4 my-4">
-                      <TrendingUp className="w-8 h-8 mx-auto mb-2 text-muted-foreground opacity-50" />
-                      <p className="text-sm font-medium text-muted-foreground">Aún no hay actividad en este mercado. ¡Sé el primero!</p>
-                    </div>
-                  ) : (
-                    <div className="divide-y divide-border/30 max-h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-border">
-                      {activityFeed.map((item) => {
-                        if (item.activityType === 'bet') {
-                          const opt = options.find(o => o.id === item.outcome);
-                          let displayOutcome = opt?.option_name || '';
-                          let optColor = opt?.color || '#0ea5e9';
-
-                          if (!opt && (item.outcome === 'yes' || item.outcome === 'no')) {
-                            displayOutcome = item.outcome === 'yes' ? 'SÍ' : 'NO';
-                            optColor = item.outcome === 'yes' ? '#22c55e' : '#ef4444';
-                          } else if (isBinaryYesNo) {
-                            optColor = displayOutcome.toLowerCase() === 'no' ? '#ef4444' : '#22c55e';
-                          } else if (item.direction === 'no') {
-                            displayOutcome = `No a ${opt?.option_name}`;
-                            optColor = '#ef4444';
-                          }
-
-                          const hasShares = item.shares && item.shares > 0;
-                          const impliedPrice = hasShares ? (item.amount / item.shares) * 100 : null;
-
-                          return (
-                            <div key={`bet-${item.id}`} className="flex items-center justify-between p-4 hover:bg-muted/10 transition-colors group">
-                              <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 border border-border/50 bg-background overflow-hidden cursor-pointer" onClick={() => openUserProfile(item.user_id, item.profiles?.username || "Usuario")}>
-                                  {item.profiles?.avatar_url ? <img src={item.profiles.avatar_url} alt="av" className="w-full h-full object-cover" /> : <UserIcon className="w-4 h-4 text-muted-foreground opacity-50" />}
-                                </div>
-                                <div className="flex flex-col">
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="font-semibold text-sm cursor-pointer hover:text-primary transition-colors text-foreground" onClick={() => openUserProfile(item.user_id, item.profiles?.username || "Usuario")}>{item.profiles?.username || "Usuario"}</span>
-                                    <span className="text-sm font-medium text-muted-foreground">compró</span>
-                                    <span className="text-sm font-bold uppercase" style={{ color: optColor }}>{displayOutcome || 'Opción'}</span>
-                                  </div>
-                                  {hasShares ? (
-                                    <span className="text-xs font-medium text-muted-foreground mt-0.5">
-                                      {Math.round(item.shares).toLocaleString()} acciones ({Math.round(impliedPrice || 0)}¢)
-                                    </span>
-                                  ) : (
-                                    <span className="text-xs font-medium text-muted-foreground mt-0.5">
-                                      {item.amount.toLocaleString()} pts invertidos
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="text-right flex flex-col items-end shrink-0 pl-2">
-                                <p className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">
-                                  {new Date(item.created_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })} • {new Date(item.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
-                                </p>
-                              </div>
-                            </div>
-                          );
-                        } else {
-                          let sharesSold = null;
-                          let priceSold = null;
-                          let soldOptionName = null;
-                          let soldDirection = null;
-
-                          if (item.description) {
-                            const matchShares = item.description.match(/Venta de ([\d.,]+) acciones/i);
-                            const matchPrice = item.description.match(/a ([\d.,]+)¢/i);
-                            const matchOption = item.description.match(/\((.*?)\)/);
-
-                            if (matchShares) sharesSold = parseFloat(matchShares[1].replace(/,/g, ''));
-                            if (matchPrice) priceSold = parseFloat(matchPrice[1].replace(/,/g, ''));
-                            if (matchOption) {
-                              const optText = matchOption[1];
-                              if (optText.toLowerCase().startsWith('no a ')) {
-                                soldDirection = 'no';
-                                soldOptionName = optText.substring(5);
-                              } else if (optText.toLowerCase().startsWith('si a ') || optText.toLowerCase().startsWith('sí a ')) {
-                                soldDirection = 'yes';
-                                soldOptionName = optText.substring(5);
-                              } else {
-                                soldOptionName = optText;
-                              }
-                            }
-                          }
-
-                          if (!sharesSold && item.shares && item.shares > 0) {
-                            sharesSold = item.shares;
-                            priceSold = (Math.abs(item.amount) / item.shares) * 100;
-                          }
-
-                          return (
-                            <div key={`cashout-${item.id}`} className="flex items-center justify-between p-4 bg-muted/5 hover:bg-muted/10 transition-colors border-l-2 border-l-muted group">
-                              <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 border border-border/50 bg-background overflow-hidden cursor-pointer" onClick={() => openUserProfile(item.user_id, item.profiles?.username || "Usuario")}>
-                                  {item.profiles?.avatar_url ? <img src={item.profiles.avatar_url} alt="av" className="w-full h-full object-cover" /> : <UserIcon className="w-4 h-4 text-muted-foreground opacity-50" />}
-                                </div>
-                                <div className="flex flex-col">
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="font-semibold text-sm cursor-pointer hover:text-primary transition-colors text-foreground" onClick={() => openUserProfile(item.user_id, item.profiles?.username || "Usuario")}>{item.profiles?.username || "Usuario"}</span>
-                                    <span className="text-sm font-medium text-muted-foreground">vendió</span>
-                                    {soldOptionName ? (
-                                      <span className="text-sm font-bold uppercase" style={{ color: soldDirection === 'no' ? '#ef4444' : '#22c55e' }}>
-                                        {soldDirection === 'no' ? `No a ${soldOptionName}` : soldOptionName}
-                                      </span>
-                                    ) : (
-                                      <span className="text-sm font-bold text-muted-foreground">su posición</span>
-                                    )}
-                                  </div>
-                                  <span className="text-xs font-medium text-muted-foreground mt-0.5">
-                                    {sharesSold && priceSold
-                                      ? `${Math.round(sharesSold).toLocaleString()} acciones (${Math.round(priceSold)}¢)`
-                                      : (item.description && item.description !== 'Cashout de predicción' ? item.description : `Liquidación por ${Math.abs(item.amount).toLocaleString()} pts`)}
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="text-right flex flex-col items-end shrink-0 pl-2">
-                                <p className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">
-                                  {new Date(item.created_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })} • {new Date(item.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
-                                </p>
-                              </div>
-                            </div>
-                          );
-                        }
-                      })}
-                    </div>
-                  )}
-                </div>
-              </TabsContent>
-
-              <TabsContent value="debate" className="m-0 focus-visible:outline-none">
-                <div className="bg-card rounded-xl border border-border/50 p-6 shadow-sm">
-                  <div className="mb-6">
-                    {replyingTo && (
-                      <div className="flex items-center justify-between bg-primary/10 text-primary px-3 py-2 rounded-lg mb-3 text-sm">
-                        <span className="flex items-center gap-2"><Reply className="w-4 h-4" /> Respondiendo a <b>{replyingTo.profiles?.username || 'Usuario'}</b></span>
-                        <button onClick={() => setReplyingTo(null)} className="hover:bg-primary/20 p-1 rounded-full"><X className="w-4 h-4" /></button>
-                      </div>
-                    )}
-                    <form onSubmit={handleAddComment} className="flex gap-3">
-                      <div className="w-10 h-10 rounded-full bg-primary/10 hidden sm:flex items-center justify-center shrink-0 border border-primary/20 overflow-hidden cursor-pointer" onClick={() => user && openUserProfile(user.id, profile?.username)}>
-                        {profile?.avatar_url ? <img src={profile.avatar_url} alt="Avatar" className="w-full h-full object-cover" /> : <UserIcon className="w-5 h-5 text-primary" />}
-                      </div>
-                      <div className="flex-1 flex gap-2">
-                        <Input id="comment-input" value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder={user ? "Opiná sobre este mercado..." : "Iniciá sesión para comentar..."} disabled={isSubmittingComment || !user} className="bg-muted/20" />
-                        <Button type="submit" disabled={!newComment.trim() || isSubmittingComment || !user}>{isSubmittingComment ? <Loader2 className="w-4 h-4 animate-spin" /> : "Enviar"}</Button>
-                      </div>
-                    </form>
-                  </div>
-                  <div className="space-y-2">
-                    {topLevelComments.length === 0 ? <p className="text-center py-8 text-muted-foreground bg-muted/10 rounded-xl border border-dashed border-border/50">Todavía no hay comentarios. Rompé el hielo.</p> : topLevelComments.map(comment => renderComment(comment))}
-                  </div>
-                </div>
-              </TabsContent>
-            </Tabs>
-          </div>
-
-          <div className="lg:col-span-2 w-full order-5 mt-2 lg:mt-8">{ReglasBlock}</div>
         </div>
 
-        <Dialog open={isShareModalOpen} onOpenChange={setIsShareModalOpen}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-xl">
-                <Share2 className="w-5 h-5 text-primary" /> Compartir Mercado
-              </DialogTitle>
-              <DialogDescription>
-                Invitá a tus amigos a predecir y debatir en este mercado.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="flex flex-col gap-4 py-4">
-              <Button variant="outline" className="w-full h-12 flex items-center justify-start gap-3 text-base border-border/50 hover:bg-muted/30 transition-colors" onClick={handleWhatsAppShare}>
-                <MessageCircle className="w-5 h-5 text-green-500" /> Compartir en WhatsApp
-              </Button>
-              <Button variant="outline" className="w-full h-12 flex items-center justify-start gap-3 text-base border-border/50 hover:bg-muted/30 transition-colors" onClick={handleTwitterShare}>
-                <Twitter className="w-5 h-5 text-blue-400" /> Compartir en X (Twitter)
-              </Button>
-              <div className="relative mt-2">
-                <Input readOnly value={marketUrl} className="pr-12 bg-muted/20 border-border/50 h-10 text-xs sm:text-sm text-muted-foreground" />
-                <Button size="icon" variant="ghost" className="absolute right-0 top-0 h-full w-12 hover:bg-transparent" onClick={handleCopyLink}>
-                  {isCopied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4 text-muted-foreground" />}
-                </Button>
+        <div className="block lg:hidden w-full order-3 mt-2">{TopHoldersBlock}</div>
+
+        <div className="lg:col-span-2 w-full order-4 lg:order-4 mt-6">
+          <Tabs defaultValue="activity" className="w-full">
+            <TabsList className="w-full justify-start border-b border-border/50 rounded-none bg-transparent h-auto p-0 mb-6 gap-6 overflow-x-auto scrollbar-none">
+              <TabsTrigger
+                value="activity"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent px-0 py-3 text-base font-bold text-muted-foreground hover:text-foreground transition-all whitespace-nowrap"
+              >
+                <TrendingUp className="w-4 h-4 mr-2" /> Actividad Reciente
+              </TabsTrigger>
+              <TabsTrigger
+                value="debate"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent px-0 py-3 text-base font-bold text-muted-foreground hover:text-foreground transition-all whitespace-nowrap"
+              >
+                <MessageSquare className="w-4 h-4 mr-2" /> Debate ({comments.length})
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="activity" className="m-0 focus-visible:outline-none">
+              <div className="rounded-xl border border-border/50 bg-card overflow-hidden shadow-sm">
+                {activityFeed.length === 0 ? (
+                  <div className="text-center py-12 border-2 border-dashed border-border/50 rounded-xl bg-muted/10 mx-4 my-4">
+                    <TrendingUp className="w-8 h-8 mx-auto mb-2 text-muted-foreground opacity-50" />
+                    <p className="text-sm font-medium text-muted-foreground">Aún no hay actividad en este mercado. ¡Sé el primero!</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-border/30 max-h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-border">
+                    {activityFeed.map((item) => {
+                      if (item.activityType === 'bet') {
+                        const opt = options.find(o => o.id === item.outcome);
+                        let displayOutcome = opt?.option_name || '';
+                        let optColor = opt?.color || '#0ea5e9';
+
+                        if (!opt && (item.outcome === 'yes' || item.outcome === 'no')) {
+                          displayOutcome = item.outcome === 'yes' ? 'SÍ' : 'NO';
+                          optColor = item.outcome === 'yes' ? '#22c55e' : '#ef4444';
+                        } else if (isBinaryYesNo) {
+                          optColor = displayOutcome.toLowerCase() === 'no' ? '#ef4444' : '#22c55e';
+                        } else if (item.direction === 'no') {
+                          displayOutcome = `No a ${opt?.option_name}`;
+                          optColor = '#ef4444';
+                        }
+
+                        const hasShares = item.shares && item.shares > 0;
+                        const impliedPrice = hasShares ? (item.amount / item.shares) * 100 : null;
+
+                        return (
+                          <div key={`bet-${item.id}`} className="flex items-center justify-between p-4 hover:bg-muted/10 transition-colors group">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 border border-border/50 bg-background overflow-hidden cursor-pointer" onClick={() => openUserProfile(item.user_id, item.profiles?.username || "Usuario")}>
+                                {item.profiles?.avatar_url ? <img src={item.profiles.avatar_url} alt="av" className="w-full h-full object-cover" /> : <UserIcon className="w-4 h-4 text-muted-foreground opacity-50" />}
+                              </div>
+                              <div className="flex flex-col">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-semibold text-sm cursor-pointer hover:text-primary transition-colors text-foreground" onClick={() => openUserProfile(item.user_id, item.profiles?.username || "Usuario")}>{item.profiles?.username || "Usuario"}</span>
+                                  <span className="text-sm font-medium text-muted-foreground">compró</span>
+                                  <span className="text-sm font-bold uppercase" style={{ color: optColor }}>{displayOutcome || 'Opción'}</span>
+                                </div>
+                                {hasShares ? (
+                                  <span className="text-xs font-medium text-muted-foreground mt-0.5">
+                                    {Math.round(item.shares).toLocaleString()} acciones ({Math.round(impliedPrice || 0)}¢)
+                                  </span>
+                                ) : (
+                                  <span className="text-xs font-medium text-muted-foreground mt-0.5">
+                                    {item.amount.toLocaleString()} pts invertidos
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="text-right flex flex-col items-end shrink-0 pl-2">
+                              <p className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">
+                                {new Date(item.created_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })} • {new Date(item.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      } else {
+                        let sharesSold = null;
+                        let priceSold = null;
+                        let soldOptionName = null;
+                        let soldDirection = null;
+
+                        if (item.description) {
+                          const matchShares = item.description.match(/Venta de ([\d.,]+) acciones/i);
+                          const matchPrice = item.description.match(/a ([\d.,]+)¢/i);
+                          const matchOption = item.description.match(/\((.*?)\)/);
+
+                          if (matchShares) sharesSold = parseFloat(matchShares[1].replace(/,/g, ''));
+                          if (matchPrice) priceSold = parseFloat(matchPrice[1].replace(/,/g, ''));
+                          if (matchOption) {
+                            const optText = matchOption[1];
+                            if (optText.toLowerCase().startsWith('no a ')) {
+                              soldDirection = 'no';
+                              soldOptionName = optText.substring(5);
+                            } else if (optText.toLowerCase().startsWith('si a ') || optText.toLowerCase().startsWith('sí a ')) {
+                              soldDirection = 'yes';
+                              soldOptionName = optText.substring(5);
+                            } else {
+                              soldOptionName = optText;
+                            }
+                          }
+                        }
+
+                        if (!sharesSold && item.shares && item.shares > 0) {
+                          sharesSold = item.shares;
+                          priceSold = (Math.abs(item.amount) / item.shares) * 100;
+                        }
+
+                        return (
+                          <div key={`cashout-${item.id}`} className="flex items-center justify-between p-4 bg-muted/5 hover:bg-muted/10 transition-colors border-l-2 border-l-muted group">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 border border-border/50 bg-background overflow-hidden cursor-pointer" onClick={() => openUserProfile(item.user_id, item.profiles?.username || "Usuario")}>
+                                {item.profiles?.avatar_url ? <img src={item.profiles.avatar_url} alt="av" className="w-full h-full object-cover" /> : <UserIcon className="w-4 h-4 text-muted-foreground opacity-50" />}
+                              </div>
+                              <div className="flex flex-col">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-semibold text-sm cursor-pointer hover:text-primary transition-colors text-foreground" onClick={() => openUserProfile(item.user_id, item.profiles?.username || "Usuario")}>{item.profiles?.username || "Usuario"}</span>
+                                  <span className="text-sm font-medium text-muted-foreground">vendió</span>
+                                  {soldOptionName ? (
+                                    <span className="text-sm font-bold uppercase" style={{ color: soldDirection === 'no' ? '#ef4444' : '#22c55e' }}>
+                                      {soldDirection === 'no' ? `No a ${soldOptionName}` : soldOptionName}
+                                    </span>
+                                  ) : (
+                                    <span className="text-sm font-bold text-muted-foreground">su posición</span>
+                                  )}
+                                </div>
+                                <span className="text-xs font-medium text-muted-foreground mt-0.5">
+                                  {sharesSold && priceSold
+                                    ? `${Math.round(sharesSold).toLocaleString()} acciones (${Math.round(priceSold)}¢)`
+                                    : (item.description && item.description !== 'Cashout de predicción' ? item.description : `Liquidación por ${Math.abs(item.amount).toLocaleString()} pts`)}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="text-right flex flex-col items-end shrink-0 pl-2">
+                              <p className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">
+                                {new Date(item.created_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })} • {new Date(item.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      }
+                    })}
+                  </div>
+                )}
               </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+            </TabsContent>
+
+            <TabsContent value="debate" className="m-0 focus-visible:outline-none">
+              <div className="bg-card rounded-xl border border-border/50 p-6 shadow-sm">
+                <div className="mb-6">
+                  {replyingTo && (
+                    <div className="flex items-center justify-between bg-primary/10 text-primary px-3 py-2 rounded-lg mb-3 text-sm">
+                      <span className="flex items-center gap-2"><Reply className="w-4 h-4" /> Respondiendo a <b>{replyingTo.profiles?.username || 'Usuario'}</b></span>
+                      <button onClick={() => setReplyingTo(null)} className="hover:bg-primary/20 p-1 rounded-full"><X className="w-4 h-4" /></button>
+                    </div>
+                  )}
+                  <form onSubmit={handleAddComment} className="flex gap-3">
+                    <div className="w-10 h-10 rounded-full bg-primary/10 hidden sm:flex items-center justify-center shrink-0 border border-primary/20 overflow-hidden cursor-pointer" onClick={() => user && openUserProfile(user.id, profile?.username)}>
+                      {profile?.avatar_url ? <img src={profile.avatar_url} alt="Avatar" className="w-full h-full object-cover" /> : <UserIcon className="w-5 h-5 text-primary" />}
+                    </div>
+                    <div className="flex-1 flex gap-2">
+                      <Input id="comment-input" value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder={user ? "Opiná sobre este mercado..." : "Iniciá sesión para comentar..."} disabled={isSubmittingComment || !user} className="bg-muted/20" />
+                      <Button type="submit" disabled={!newComment.trim() || isSubmittingComment || !user}>{isSubmittingComment ? <Loader2 className="w-4 h-4 animate-spin" /> : "Enviar"}</Button>
+                    </div>
+                  </form>
+                </div>
+                <div className="space-y-2">
+                  {topLevelComments.length === 0 ? <p className="text-center py-8 text-muted-foreground bg-muted/10 rounded-xl border border-dashed border-border/50">Todavía no hay comentarios. Rompé el hielo.</p> : topLevelComments.map(comment => renderComment(comment))}
+                </div>
+              </div>
+            </TabsContent>
+          </Tabs>
+        </div>
+
+        <div className="lg:col-span-2 w-full order-5 mt-2 lg:mt-8">{ReglasBlock}</div>
+
+        {/* OVERLAY DEL PANEL DE APUESTAS EN MOBILE */}
+        {(selectedOptionId || selectedSellPosition) && (
+          <div
+            className="fixed inset-0 bg-black/60 z-40 lg:hidden animate-in fade-in duration-300"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setSelectedOptionId(null);
+              setSelectedSellPosition(null);
+            }}
+          />
+        )}
+
+        {/* CONTENEDOR DEL PANEL DE APUESTAS */}
+        <div className={cn(
+          "lg:col-span-1 lg:sticky lg:top-24 lg:w-full lg:order-2",
+          (selectedOptionId || selectedSellPosition || isMarketResolved)
+            ? "fixed bottom-0 left-0 right-0 z-50 animate-in slide-in-from-bottom duration-300 lg:static lg:animate-none lg:z-auto"
+            : "w-full order-2 hidden lg:block" // Ocultamos el panel en mobile si no hay nada seleccionado
+        )}>
+
+          <div className={cn(
+            "border border-border/50 bg-card p-3 sm:p-4 shadow-2xl lg:shadow-xl",
+            (selectedOptionId || selectedSellPosition || isMarketResolved)
+              ? "rounded-t-3xl rounded-b-none lg:rounded-2xl max-h-[85dvh] overflow-y-auto pb-8 lg:pb-3"
+              : "rounded-2xl overflow-hidden"
+          )}>
+
+            {/* Barrita drag decorativa */}
+            {(selectedOptionId || selectedSellPosition) && (
+              <div className="w-12 h-1.5 bg-muted rounded-full mx-auto mb-4 lg:hidden" />
+            )}
+
+            {isMarketResolved ? (
+              <div className="mb-2 p-6 text-center bg-primary/10 border border-primary/20 rounded-xl">
+                <Trophy className="w-12 h-12 text-primary mx-auto mb-3 drop-shadow-md" />
+                <h3 className="text-xl font-black text-primary mb-1">MERCADO RESUELTO</h3>
+                <p className="text-sm font-medium text-muted-foreground mb-4">La opción ganadora fue:</p>
+                <Badge className="text-lg px-4 py-1.5 font-black bg-background text-foreground border-2 border-primary/50 shadow-sm">
+                  {winningOption?.option_name || 'Desconocido'}
+                </Badge>
+                <p className="text-xs text-muted-foreground mt-4">Los puntos ya fueron distribuidos a las carteras de los ganadores.</p>
+              </div>
+            ) : (
+              <Tabs value={tradeTab} onValueChange={setTradeTab} className="w-full">
+                <TabsList className="grid w-full grid-cols-2 h-12 p-1 bg-muted/50 rounded-xl mb-4">
+                  <TabsTrigger value="buy" className="rounded-lg text-sm sm:text-base font-bold data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm transition-all text-muted-foreground">
+                    Comprar
+                  </TabsTrigger>
+                  <TabsTrigger value="sell" className="rounded-lg text-sm sm:text-base font-bold data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm transition-all text-muted-foreground">
+                    Vender
+                  </TabsTrigger>
+                </TabsList>
+
+                {isMarketClosed && !isMarketResolved && (
+                  <div className="mb-4 mx-2 p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-2 text-red-500">
+                    <Lock className="w-4 h-4 mt-0.5 shrink-0" />
+                    <p className="text-xs font-medium leading-relaxed">
+                      Este mercado ya cerró y las operaciones están bloqueadas. Los puntos de las apuestas ganadoras se repartirán cuando el administrador confirme el resultado final.
+                    </p>
+                  </div>
+                )}
+
+                <TabsContent value="buy" className="p-2 sm:p-3 mt-0">
+                  <div className="flex flex-col gap-4">
+                    {!selectedOptionId ? (
+                      <div className="p-6 text-center border-2 border-dashed border-border/50 rounded-xl bg-muted/10">
+                        <TrendingUp className="w-8 h-8 mx-auto mb-2 text-muted-foreground opacity-50" />
+                        <p className="text-sm font-medium text-muted-foreground">Seleccioná tu predicción para operar.</p>
+                      </div>
+                    ) : (
+                      <>
+                        <div className={cn("p-4 rounded-xl border", !isRedTheme ? 'border-green-500/40 bg-green-500/10' : 'border-red-500/40 bg-red-500/10')}>
+                          <p className={cn("text-xs font-bold uppercase mb-1 opacity-90", !isRedTheme ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400')}>Estás comprando</p>
+                          <div className="flex justify-between items-center">
+                            <span className={cn("font-black text-lg sm:text-xl", !isRedTheme ? 'text-green-700 dark:text-green-500' : 'text-red-700 dark:text-red-500')}>
+                              {isBinaryYesNo ? `Comprar ${selectedOptName}` : `Comprar ${selectedDirection === 'yes' ? 'Sí' : 'No'}`}
+                            </span>
+                            <span className={cn("font-bold text-xl", !isRedTheme ? 'text-green-700 dark:text-green-500' : 'text-red-700 dark:text-red-500')}>
+                              {selectedDirection === 'yes'
+                                ? Math.round(getOptionPrice(options.find(o => o.id === selectedOptionId)?.total_votes, options.find(o => o.id === selectedOptionId)?.is_eliminated) * 100)
+                                : 100 - Math.round(getOptionPrice(options.find(o => o.id === selectedOptionId)?.total_votes, options.find(o => o.id === selectedOptionId)?.is_eliminated) * 100)}¢
+                            </span>
+                          </div>
+                          {!isBinaryYesNo && <p className="text-sm font-medium mt-1 truncate text-foreground">{selectedOptName}</p>}
+                        </div>
+
+                        {options.find(o => o.id === selectedOptionId)?.is_eliminated ? (
+                          <div className="p-6 text-center border border-red-500/30 rounded-xl bg-red-500/5">
+                            <AlertCircle className="w-8 h-8 mx-auto mb-2 text-red-500 opacity-80" />
+                            <p className="text-sm font-bold text-red-500">Opción Eliminada</p>
+                            <p className="text-xs text-muted-foreground mt-1">Ya no se pueden comprar acciones de este resultado.</p>
+                          </div>
+                        ) : (
+                          <>
+                            <div>
+                              <div className="flex justify-between items-center mb-1.5">
+                                <Label className="text-muted-foreground">Monto a invertir</Label>
+                                {user && (
+                                  <button
+                                    onClick={() => setBetAmount(profile?.points?.toString() || "0")}
+                                    className="text-[10px] font-bold uppercase tracking-wider text-primary hover:text-primary/80 transition-colors bg-primary/10 px-2 py-0.5 rounded-full"
+                                  >
+                                    MAX
+                                  </button>
+                                )}
+                              </div>
+                              <div className="relative">
+                                <Input type="number" placeholder="0" value={betAmount} onChange={(e) => setBetAmount(e.target.value)} disabled={isMarketClosed} className="pl-4 pr-12 h-14 text-xl font-bold bg-muted/20 border-border/50 focus-visible:ring-1 focus-visible:ring-primary/50 disabled:opacity-50" />
+                                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground font-bold">pts</span>
+                              </div>
+                            </div>
+
+                            {orderSummary && (
+                              <div className="p-4 rounded-xl bg-muted/20 border border-border/50 space-y-3">
+                                <div className="flex justify-between items-center w-full mb-3 text-sm">
+                                  <span className="text-muted-foreground whitespace-nowrap mr-2">Precio promedio</span>
+                                  <div className="flex items-center gap-2 text-right whitespace-nowrap">
+                                    <span className="font-bold">{orderSummary.avgPriceCents}¢</span>
+                                  </div>
+                                </div>
+                                <div className="flex justify-between items-center w-full mb-3 text-sm">
+                                  <span className="text-muted-foreground whitespace-nowrap mr-2">Acciones estimadas</span>
+                                  <div className="flex items-center gap-2 text-right whitespace-nowrap">
+                                    <span className="font-bold">{orderSummary.shares.toLocaleString()}</span>
+                                  </div>
+                                </div>
+
+                                <div className="h-px w-full bg-border/50 my-2" />
+
+                                <div className="flex justify-between items-center w-full mb-3 text-sm">
+                                  <span className="text-muted-foreground whitespace-nowrap mr-2">Ganancia Potencial</span>
+                                  <div className="flex items-center gap-2 text-right whitespace-nowrap">
+                                    <span className={cn("font-bold", !isRedTheme ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400")}>+{orderSummary.potentialProfit.toLocaleString()} pts</span>
+                                    <span className={cn("text-[10px] px-1.5 py-0.5 rounded-md", !isRedTheme ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400")}>+{orderSummary.roi.toFixed(1)}%</span>
+                                  </div>
+                                </div>
+                                <div className="flex justify-between items-center w-full mb-3 text-base">
+                                  <span className="font-bold text-foreground whitespace-nowrap mr-2">Retorno Total</span>
+                                  <div className="flex items-center gap-2 text-right whitespace-nowrap">
+                                    <span className={cn("font-black", !isRedTheme ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400")}>{orderSummary.potentialPayout.toLocaleString()} pts</span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {orderSummary && orderSummary.slippage > 3 && (
+                              <div className="px-3 py-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg flex items-start gap-2 text-yellow-600 dark:text-yellow-500 animate-in fade-in">
+                                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                                <p className="text-[11px] font-medium leading-tight">
+                                  ⚠️ Deslizamiento alto ({orderSummary.slippage.toFixed(1)}%). Tu orden mueve la liquidez y el precio promedio será superior al inicial.
+                                </p>
+                              </div>
+                            )}
+
+                            {user && (
+                              <div className="flex justify-between items-center text-xs text-muted-foreground px-1">
+                                <span>Balance disponible:</span>
+                                <span className="font-bold text-foreground">{(profile?.points || 0).toLocaleString()} pts</span>
+                              </div>
+                            )}
+
+                            <Button
+                              size="lg"
+                              disabled={!betAmount || isPlacingBet || isMarketClosed}
+                              onClick={handlePlaceBet}
+                              className={cn(
+                                "w-full text-sm font-bold h-12 transition-colors mt-2",
+                                isMarketClosed ? "bg-muted text-muted-foreground" :
+                                  (!isRedTheme ? "bg-green-600 hover:bg-green-700 text-white dark:bg-green-500 dark:hover:bg-green-600 dark:text-black" : "bg-red-600 hover:bg-red-700 text-white dark:bg-red-500 dark:hover:bg-red-600 dark:text-black")
+                              )}
+                            >
+                              <span className="truncate w-full text-center">
+                                {isMarketClosed ? <><Lock className="w-4 h-4 mr-2 inline-block" /> Mercado Cerrado</> :
+                                  isPlacingBet ? <><Loader2 className="w-4 h-4 mr-2 animate-spin inline-block" /> Procesando...</> :
+                                    !user ? "Ingresar para Operar" :
+                                      `Comprar ${isBinaryYesNo ? (selectedDirection === 'yes' ? 'Sí' : 'No') : selectedOptName} por ${betAmount || 0} pts`}
+                              </span>
+                            </Button>
+                          </>
+                        )}
+
+                        {marketPositionSummary && (
+                          <div className="mt-4 p-4 bg-background border border-border/50 rounded-xl space-y-2 animate-in fade-in">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1.5"><Wallet className="w-3 h-3" /> Resumen de tus posiciones</p>
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm font-medium text-foreground">Total Invertido</span>
+                              <span className="text-sm font-bold text-foreground">{marketPositionSummary.totalInvested.toLocaleString()} pts</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm font-medium text-foreground">Valor Actual</span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-bold text-primary">{marketPositionSummary.totalCurrentValue.toLocaleString()} pts</span>
+                                <Badge variant="outline" className={cn("text-[10px] font-bold px-1.5 py-0 h-5 border", marketPositionSummary.pnl >= 0 ? "bg-green-500/10 text-green-600 border-green-500/30" : "bg-red-500/10 text-red-600 border-red-500/30")}>
+                                  {marketPositionSummary.pnl >= 0 ? '+' : ''}{marketPositionSummary.pnlPct.toFixed(1)}%
+                                </Badge>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                      </>
+                    )}
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="sell" className="p-2 sm:p-3 mt-0">
+                  {!user ? (
+                    <div className="text-center py-8"><p className="text-muted-foreground text-sm mb-4">Iniciá sesión para ver tu portfolio.</p><Button onClick={() => setIsAuthModalOpen(true)}>Ingresar</Button></div>
+                  ) : consolidatedPositions.length === 0 ? (
+                    <div className="p-6 text-center border-2 border-dashed border-border/50 rounded-xl bg-muted/10"><Layers className="w-8 h-8 mx-auto mb-2 text-muted-foreground opacity-50" /><p className="text-sm font-medium text-muted-foreground">No tenés posiciones activas en este mercado.</p></div>
+                  ) : (
+                    <div className="space-y-4">
+                      {!selectedSellPosition ? (
+                        <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1.5"><Layers className="w-3 h-3" /> Selecciona qué liquidar</p>
+                          {consolidatedPositions.map(pos => {
+                            const opt = options.find(o => o.id === pos.outcome);
+                            const cashoutVal = calculatePartialCashout(pos.outcome, pos.direction, pos.totalShares);
+                            const pnl = cashoutVal - pos.totalInvested;
+                            const pnlPct = (pnl / pos.totalInvested) * 100;
+                            const isRed = pos.direction === 'no' || (isBinaryYesNo && opt?.option_name.toLowerCase() === 'no');
+
+                            return (
+                              <div key={`${pos.outcome}-${pos.direction}`} className={cn("p-4 rounded-xl border border-border/50 bg-card hover:bg-muted/30 cursor-pointer transition-colors", isMarketClosed && "opacity-75")} onClick={() => { if (!isMarketClosed) setSelectedSellPosition(`${pos.outcome}|${pos.direction}`) }}>
+                                <div className="flex justify-between items-start mb-3">
+                                  <div>
+                                    <p className="font-bold text-foreground">
+                                      {isBinaryYesNo ? (
+                                        <span className={cn("mr-1", isRed ? "text-red-600 dark:text-red-500" : "text-green-600 dark:text-green-500")}>{opt?.option_name}</span>
+                                      ) : (
+                                        <><span className={cn("mr-1", isRed ? "text-red-600 dark:text-red-500" : "text-green-600 dark:text-green-500")}>{pos.direction === 'no' ? 'No' : 'Sí'}</span> a {opt?.option_name || "Opción"}</>
+                                      )}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground font-medium mt-0.5">{Math.round(pos.totalShares).toLocaleString()} acciones</p>
+                                  </div>
+                                  <Badge variant="outline" className={cn("font-bold border", pnl >= 0 ? "bg-green-500/10 text-green-600 dark:text-green-500 border-green-500/30" : "bg-red-500/10 text-red-600 dark:text-red-500 border-red-500/30")}>{pnl >= 0 ? "+" : ""}{pnlPct.toFixed(1)}%</Badge>
+                                </div>
+                                <div className="flex justify-between items-center text-sm pt-2 border-t border-border/50">
+                                  <span className="text-muted-foreground">Valor Actual:</span>
+                                  <span className="font-bold text-primary">{cashoutVal.toLocaleString()} pts</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="space-y-4 animate-in slide-in-from-right-4">
+                          {(() => {
+                            const [optId, dir] = selectedSellPosition.split('|');
+                            const opt = options.find(o => o.id === optId);
+                            const pos = consolidatedPositions.find(p => p.outcome === optId && p.direction === dir);
+                            if (!pos) return null;
+
+                            const sharesToSell = parseFloat(sellSharesInput) || 0;
+                            const isValidSell = sharesToSell > 0 && sharesToSell <= pos.totalShares;
+                            const expectedReturn = isValidSell ? calculatePartialCashout(optId, dir, sharesToSell) : 0;
+                            const isRed = dir === 'no' || (isBinaryYesNo && opt?.option_name.toLowerCase() === 'no');
+
+                            return (
+                              <>
+                                <div className="flex items-center gap-2 mb-2">
+                                  <button onClick={() => { setSelectedSellPosition(null); setSellSharesInput(""); }} className="p-1 hover:bg-muted rounded text-muted-foreground"><ArrowLeft className="w-4 h-4" /></button>
+                                  <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Configurar Venta</p>
+                                </div>
+
+                                <div className={cn("p-4 rounded-xl border", !isRed ? 'border-green-500/30 bg-green-500/5' : 'border-red-500/30 bg-red-500/5')}>
+                                  <p className="text-sm font-black text-foreground">{isBinaryYesNo ? opt?.option_name : `${dir === 'yes' ? 'Sí' : 'No'} a ${opt?.option_name}`}</p>
+                                  <p className="text-xs font-medium text-muted-foreground mt-1">Disponibles: <span className="font-bold text-foreground">{Math.round(pos.totalShares).toLocaleString()} acciones</span></p>
+                                </div>
+
+                                <div>
+                                  <div className="flex justify-between items-center mb-1.5">
+                                    <Label className="text-muted-foreground">Acciones a liquidar</Label>
+                                    <button onClick={() => setSellSharesInput(pos.totalShares.toString())} className="text-[10px] font-bold uppercase tracking-wider text-primary hover:text-primary/80 transition-colors bg-primary/10 px-2 py-0.5 rounded-full">MAX</button>
+                                  </div>
+                                  <Input type="number" placeholder="0" value={sellSharesInput} onChange={(e) => setSellSharesInput(e.target.value)} max={pos.totalShares} className="h-14 text-xl font-bold bg-muted/20 border-border/50 focus-visible:ring-primary/50" />
+                                </div>
+
+                                <div className="p-4 rounded-xl bg-background border border-border/50">
+                                  <div className="flex justify-between items-center w-full text-base">
+                                    <span className="font-bold text-foreground whitespace-nowrap mr-2">Retorno Estimado</span>
+                                    <span className="font-black text-primary">{expectedReturn.toLocaleString()} pts</span>
+                                  </div>
+                                </div>
+
+                                <Button size="lg" className="w-full h-12 font-bold bg-secondary hover:bg-secondary/80 text-secondary-foreground mt-2" onClick={executeSellShares} disabled={!isValidSell || isSelling || isMarketClosed}>
+                                  {isMarketClosed ? <><Lock className="w-4 h-4 mr-2" /> Bloqueado</> : isSelling ? <Loader2 className="w-4 h-4 animate-spin" /> : isValidSell ? `Liquidar por ${expectedReturn} pts` : "Ingresar cantidad"}
+                                </Button>
+                              </>
+                            );
+                          })()}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </TabsContent>
+              </Tabs>
+            )}
+          </div>
+        </div>
 
       </main>
+
+      <Dialog open={isShareModalOpen} onOpenChange={setIsShareModalOpen}>
+        {/* MODAL DE COMPARTIR CORREGIDO: "Bottom Sheet" en mobile, centrado en desktop */}
+        <DialogContent className="sm:max-w-md p-0 lg:p-6 fixed bottom-0 left-0 right-0 top-auto translate-y-0 rounded-t-3xl rounded-b-none border-t border-border/50 lg:static lg:rounded-2xl lg:border animate-in slide-in-from-bottom duration-300 lg:animate-none">
+          <div className="w-12 h-1.5 bg-muted rounded-full mx-auto mt-4 mb-2 lg:hidden" />
+          <DialogHeader className="px-6 pt-2 pb-0 lg:p-0">
+            <DialogTitle className="flex items-center gap-2 text-xl">
+              <Share2 className="w-5 h-5 text-primary" /> Compartir Mercado
+            </DialogTitle>
+            <DialogDescription>
+              Invitá a tus amigos a predecir y debatir en este mercado.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 p-6 pt-4 lg:p-0 lg:pt-4 pb-safe">
+            <Button variant="outline" className="w-full h-12 flex items-center justify-start gap-3 text-base border-border/50 hover:bg-muted/30 transition-colors" onClick={handleWhatsAppShare}>
+              <MessageCircle className="w-5 h-5 text-green-500" /> Compartir en WhatsApp
+            </Button>
+            <Button variant="outline" className="w-full h-12 flex items-center justify-start gap-3 text-base border-border/50 hover:bg-muted/30 transition-colors" onClick={handleTwitterShare}>
+              <Twitter className="w-5 h-5 text-blue-400" /> Compartir en X (Twitter)
+            </Button>
+            <div className="relative mt-2">
+              <Input readOnly value={marketUrl} className="pr-12 bg-muted/20 border-border/50 h-10 text-xs sm:text-sm text-muted-foreground" />
+              <Button size="icon" variant="ghost" className="absolute right-0 top-0 h-full w-12 hover:bg-transparent" onClick={handleCopyLink}>
+                {isCopied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4 text-muted-foreground" />}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} onAuthSuccess={() => { setIsAuthModalOpen(false); fetchUserAndProfile(); }} isDarkMode={isDarkMode} />
     </div>
