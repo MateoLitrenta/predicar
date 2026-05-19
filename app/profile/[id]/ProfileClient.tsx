@@ -16,8 +16,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
-
 import { ResponsiveContainer, AreaChart, Area, YAxis, XAxis, Tooltip } from "recharts";
+import { useTheme } from "@/components/theme-provider";
 
 const ACTIVE_STATUSES = ["active", "pending"];
 const FINISHED_STATUSES = ["resolved", "rejected"];
@@ -44,7 +44,7 @@ export default function ProfileClient({ profileId }: ProfileClientProps) {
 
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [myProfile, setMyProfile] = useState<any>(null);
-  const [isDarkMode, setIsDarkMode] = useState(true);
+  const { isDarkMode, toggleDarkMode } = useTheme();
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   const [viewedProfile, setViewedProfile] = useState<any>(null);
@@ -98,11 +98,6 @@ export default function ProfileClient({ profileId }: ProfileClientProps) {
     fetchAuth();
     fetchViewedProfileData();
   }, [fetchAuth, fetchViewedProfileData]);
-
-  useEffect(() => {
-    if (isDarkMode) document.documentElement.classList.add("dark");
-    else document.documentElement.classList.remove("dark");
-  }, [isDarkMode]);
 
   const calculateRealCashout = useCallback((bet: any, market: any, opt: any) => {
     const shares = Number(bet.shares || 0);
@@ -320,7 +315,7 @@ export default function ProfileClient({ profileId }: ProfileClientProps) {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-muted/10 flex flex-col">
-        <NavHeader points={myProfile?.points ?? 10000} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode(!isDarkMode)} onPointsUpdate={() => { }} userId={null} userEmail={null} onOpenAuthModal={() => { }} onSignOut={async () => { }} isAdmin={false} username={null} />
+        <NavHeader points={myProfile?.points ?? 10000} isDarkMode={isDarkMode} onToggleDarkMode={toggleDarkMode} onPointsUpdate={() => { }} userId={null} userEmail={null} onOpenAuthModal={() => { }} onSignOut={async () => { }} isAdmin={false} username={null} />
         <main className="container mx-auto px-4 py-8 flex-1 max-w-5xl">
           <div className="h-8 w-32 bg-muted/60 rounded animate-pulse mb-8" />
 
@@ -357,7 +352,7 @@ export default function ProfileClient({ profileId }: ProfileClientProps) {
 
   return (
     <div className="min-h-screen bg-muted/10 flex flex-col pb-20 lg:pb-0">
-      <NavHeader points={myProfile?.points ?? 10000} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode(!isDarkMode)} onPointsUpdate={() => fetchAuth()} userId={currentUser?.id ?? null} userEmail={currentUser?.email ?? null} onOpenAuthModal={() => setIsAuthModalOpen(true)} onSignOut={async () => { await supabase.auth.signOut(); router.push("/"); }} isAdmin={myProfile?.role === "admin"} username={myProfile?.username} />
+      <NavHeader points={myProfile?.points ?? 10000} isDarkMode={isDarkMode} onToggleDarkMode={toggleDarkMode} onPointsUpdate={() => fetchAuth()} userId={currentUser?.id ?? null} userEmail={currentUser?.email ?? null} onOpenAuthModal={() => setIsAuthModalOpen(true)} onSignOut={async () => { await supabase.auth.signOut(); router.push("/"); }} isAdmin={myProfile?.role === "admin"} username={myProfile?.username} />
 
       <main className="container mx-auto px-4 sm:px-6 py-6 lg:py-8 flex-1 max-w-4xl">
         <div className="flex items-center justify-between mb-6 sm:mb-8">

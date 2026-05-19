@@ -12,6 +12,7 @@ import { Plus, Search, Flame, Clock, TrendingUp, Loader2, Timer } from "lucide-r
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
+import { useTheme } from "@/components/theme-provider";
 
 interface MarketOption {
   id: string;
@@ -39,7 +40,7 @@ interface Market {
 type SortOption = "trending" | "newest" | "ending_soon" | "volume";
 
 export default function PredictionMarketDashboard() {
-  const [isDarkMode, setIsDarkMode] = useState(true);
+  const { isDarkMode, toggleDarkMode } = useTheme();
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("trending");
@@ -163,11 +164,6 @@ export default function PredictionMarketDashboard() {
     return () => { supabase.removeChannel(channel); };
   }, [supabase, fetchMarkets]);
 
-  useEffect(() => {
-    if (isDarkMode) document.documentElement.classList.add("dark");
-    else document.documentElement.classList.remove("dark");
-  }, [isDarkMode]);
-
   const handlePointsUpdate = (newPoints: number) => { setUserPoints(newPoints); };
   const handleSignOut = async () => { await supabase.auth.signOut(); };
   const handleAuthSuccess = async () => {
@@ -216,7 +212,7 @@ export default function PredictionMarketDashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      <NavHeader points={userPoints} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode(!isDarkMode)} onPointsUpdate={handlePointsUpdate} userId={user?.id ?? null} userEmail={user?.email ?? null} onOpenAuthModal={() => setIsAuthModalOpen(true)} onSignOut={handleSignOut} isAdmin={userRole === "admin"} username={username} />
+      <NavHeader points={userPoints} isDarkMode={isDarkMode} onToggleDarkMode={toggleDarkMode} onPointsUpdate={handlePointsUpdate} userId={user?.id ?? null} userEmail={user?.email ?? null} onOpenAuthModal={() => setIsAuthModalOpen(true)} onSignOut={handleSignOut} isAdmin={userRole === "admin"} username={username} />
 
       <main className="container mx-auto px-4 py-4 md:py-6 max-w-[1400px]">
         <div className="flex flex-col lg:flex-row lg:items-center gap-3 lg:gap-6 mb-6 pb-4 border-b border-border/40 lg:pb-0 lg:h-14 lg:border-none">

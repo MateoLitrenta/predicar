@@ -23,6 +23,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Coins, User as UserIcon, ArrowLeft, Loader2, TrendingUp, History, Pencil, Landmark, Lock, LineChart, CheckCircle2, XCircle, Gift, Copy, Check, Users, Wallet, CalendarDays, ChevronRight, ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { useTheme } from "@/components/theme-provider";
 
 import { ResponsiveContainer, AreaChart, Area, Tooltip, XAxis, YAxis } from "recharts";
 
@@ -56,7 +57,7 @@ export default function ProfilePage() {
   const [isChecking, setIsChecking] = useState(true);
   const [isLoadingBets, setIsLoadingBets] = useState(true);
   const [isLoadingTransactions, setIsLoadingTransactions] = useState(true);
-  const [isDarkMode, setIsDarkMode] = useState(true);
+  const { isDarkMode, toggleDarkMode } = useTheme();
 
   const [sellingBetId, setSellingBetId] = useState<string | null>(null);
   const [betToSell, setBetToSell] = useState<{ id: string, title: string, outcomeName: string, direction: string, cashoutValue: number, pnl: number, pnlPercentage: number } | null>(null);
@@ -137,11 +138,6 @@ export default function ProfilePage() {
   }, [router]);
 
   useEffect(() => { if (profile?.id) fetchUserData(); }, [profile?.id, fetchUserData]);
-
-  useEffect(() => {
-    if (isDarkMode) document.documentElement.classList.add("dark");
-    else document.documentElement.classList.remove("dark");
-  }, [isDarkMode]);
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(referralLink);
@@ -358,7 +354,7 @@ export default function ProfilePage() {
   if (isChecking) {
     return (
       <div className="min-h-screen bg-muted/10 flex flex-col">
-        <NavHeader points={10000} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode(!isDarkMode)} onPointsUpdate={() => { }} userId={null} userEmail={null} onOpenAuthModal={() => { }} onSignOut={async () => { }} isAdmin={false} username={null} />
+        <NavHeader points={10000} isDarkMode={isDarkMode} onToggleDarkMode={toggleDarkMode} onPointsUpdate={() => { }} userId={null} userEmail={null} onOpenAuthModal={() => { }} onSignOut={async () => { }} isAdmin={false} username={null} />
 
         <main className="container mx-auto px-4 py-8 flex-1 max-w-4xl">
           <div className="flex items-center justify-between mb-8">
@@ -386,7 +382,7 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-muted/10 flex flex-col pb-20 lg:pb-0">
-      <NavHeader points={profile.points ?? 10000} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode(!isDarkMode)} onPointsUpdate={() => { }} userId={profile.id} userEmail={profile.email ?? null} onOpenAuthModal={() => router.push("/")} onSignOut={async () => { await createClient().auth.signOut(); router.replace("/"); }} isAdmin={profile.role === "admin"} username={profile.username ?? null} />
+      <NavHeader points={profile.points ?? 10000} isDarkMode={isDarkMode} onToggleDarkMode={toggleDarkMode} onPointsUpdate={() => { }} userId={profile.id} userEmail={profile.email ?? null} onOpenAuthModal={() => router.push("/")} onSignOut={async () => { await createClient().auth.signOut(); router.replace("/"); }} isAdmin={profile.role === "admin"} username={profile.username ?? null} />
 
       <main className="container mx-auto px-4 sm:px-6 py-6 lg:py-8 flex-1 max-w-4xl">
 

@@ -12,6 +12,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Trophy, Medal, User, Loader2, ArrowLeft, BarChart3, Wallet, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTheme } from "@/components/theme-provider";
 
 interface LeaderboardUser {
   user_id: string;
@@ -32,14 +33,10 @@ export default function RankingPage() {
   const [users, setUsers] = useState<LeaderboardUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<any>(null);
-  const [isDarkMode, setIsDarkMode] = useState(true);
+  const { isDarkMode, toggleDarkMode } = useTheme();
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [timeframe, setTimeframe] = useState<TimeframeType>('ALL');
 
-  useEffect(() => {
-    if (isDarkMode) document.documentElement.classList.add("dark");
-    else document.documentElement.classList.remove("dark");
-  }, [isDarkMode]);
 
   const loadData = async (selectedTimeframe: TimeframeType) => {
     setIsLoading(true);
@@ -75,7 +72,7 @@ export default function RankingPage() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex flex-col">
-        <NavHeader points={currentUser?.points ?? 0} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode(!isDarkMode)} onPointsUpdate={() => {}} userId={null} userEmail={null} onOpenAuthModal={() => {}} onSignOut={async () => {}} isAdmin={false} />
+        <NavHeader points={currentUser?.points ?? 0} isDarkMode={isDarkMode} onToggleDarkMode={toggleDarkMode} onPointsUpdate={() => {}} userId={null} userEmail={null} onOpenAuthModal={() => {}} onSignOut={async () => {}} isAdmin={false} />
         
         <main className="container mx-auto px-4 py-8 flex-1 max-w-6xl">
           <div className="h-8 w-32 bg-muted/60 rounded animate-pulse mb-6" />
@@ -152,7 +149,7 @@ export default function RankingPage() {
       <NavHeader 
         points={currentUser?.points ?? 0} 
         isDarkMode={isDarkMode} 
-        onToggleDarkMode={() => setIsDarkMode(!isDarkMode)} 
+        onToggleDarkMode={toggleDarkMode} 
         onPointsUpdate={() => loadData(timeframe)} 
         userId={currentUser?.id ?? null} 
         userEmail={currentUser?.email ?? null} 

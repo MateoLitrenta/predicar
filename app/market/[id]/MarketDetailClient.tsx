@@ -23,6 +23,7 @@ import { Loader2, ArrowLeft, Clock, Coins, X, User as UserIcon, MessageSquare, R
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { useTheme } from "@/components/theme-provider";
 
 interface MarketDetailClientProps {
   marketId: string;
@@ -73,7 +74,7 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
 
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
-  const [isDarkMode, setIsDarkMode] = useState(true);
+  const { isDarkMode, toggleDarkMode } = useTheme();
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -244,11 +245,6 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
 
     return () => { supabase.removeChannel(channel); };
   }, [marketId, supabase, fetchData, fetchUserBets]);
-
-  useEffect(() => {
-    if (isDarkMode) document.documentElement.classList.add("dark");
-    else document.documentElement.classList.remove("dark");
-  }, [isDarkMode]);
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(marketUrl);
@@ -467,10 +463,11 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
 
   // --- MOTOR GRÁFICO: ESCALÓN PERFECTO ESTILO KALSHI ---
   const filteredHistory = useMemo(() => {
-    if (!history || history.length === 0) return [];
+    if (!market) return [];
 
     const now = Date.now();
-    let startTime = history[0].timestamp;
+    const marketCreatedAt = new Date(market.created_at).getTime();
+    let startTime = marketCreatedAt;
 
     if (chartTimeframe !== 'ALL') {
       switch (chartTimeframe) {
@@ -484,37 +481,39 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
       }
     }
 
-    let baselineValue = history[0];
-    for (let i = history.length - 1; i >= 0; i--) {
-      if (history[i].timestamp <= startTime) {
-        baselineValue = history[i];
+    startTime = Math.max(startTime, marketCreatedAt);
+
+    const initialPoint: any = { timestamp: marketCreatedAt };
+    options.forEach(opt => {
+      if (!opt.is_eliminated) {
+        initialPoint[opt.id] = getOptionPrice(0, false) * 100;
+      }
+    });
+
+    const fullHistory = [initialPoint, ...(history || [])].sort((a, b) => a.timestamp - b.timestamp);
+
+    let baselineValue = fullHistory[0];
+    for (let i = fullHistory.length - 1; i >= 0; i--) {
+      if (fullHistory[i].timestamp <= startTime) {
+        baselineValue = fullHistory[i];
         break;
       }
     }
 
-    const rawPoints = history.filter(h => h.timestamp > startTime);
+    const rawPoints = fullHistory.filter(h => h.timestamp > startTime);
     const dataInTimeframe = [{ ...baselineValue, timestamp: startTime }, ...rawPoints];
 
     if (dataInTimeframe.length === 0) return [];
 
     if (market && market.status !== 'resolved') {
-      // 1. Agarramos el último momento histórico real de la BD
       const lastRealPoint = dataInTimeframe[dataInTimeframe.length - 1];
-
-      // 2. Calculamos cómo debería verse HOY (sumando 100% sin los eliminados)
       const currentProbs: any = { timestamp: lastRealPoint.timestamp };
       options.forEach(opt => {
         if (!opt.is_eliminated) {
-          // Usamos getOptionPrice que ya tiene la matemática perfecta
           currentProbs[opt.id] = getOptionPrice(opt.total_votes, false) * 100;
         }
       });
-
-      // 3. INYECCIÓN CLAVE: Clavamos el subidón en el MISMO SEGUNDO del último evento.
-      // Esto hace que el gráfico salte a 100% en el pasado, igual que Kalshi.
       dataInTimeframe.push(currentProbs);
-
-      // 4. Tiramos la línea horizontal ya corregida hasta "ahora"
       dataInTimeframe.push({
         ...currentProbs,
         timestamp: now
@@ -628,7 +627,7 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex flex-col">
-        <NavHeader points={profile?.points ?? 10000} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode(!isDarkMode)} onPointsUpdate={() => { }} userId={null} userEmail={null} onOpenAuthModal={() => { }} onSignOut={async () => { }} isAdmin={false} username={null} />
+        <NavHeader points={profile?.points ?? 10000} isDarkMode={isDarkMode} onToggleDarkMode={toggleDarkMode} onPointsUpdate={() => { }} userId={null} userEmail={null} onOpenAuthModal={() => { }} onSignOut={async () => { }} isAdmin={false} username={null} />
 
         <main className="container mx-auto px-4 py-8 flex-1 max-w-6xl">
           <div className="h-8 w-32 bg-muted/60 rounded animate-pulse mb-6" />
@@ -778,7 +777,7 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <NavHeader points={profile?.points ?? 10000} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode(!isDarkMode)} onPointsUpdate={() => fetchUserAndProfile()} userId={user?.id ?? null} userEmail={user?.email ?? null} onOpenAuthModal={() => setIsAuthModalOpen(true)} onSignOut={async () => { await supabase.auth.signOut(); fetchUserAndProfile(); }} isAdmin={profile?.role === "admin"} username={profile?.username} />
+      <NavHeader points={profile?.points ?? 10000} isDarkMode={isDarkMode} onToggleDarkMode={toggleDarkMode} onPointsUpdate={() => fetchUserAndProfile()} userId={user?.id ?? null} userEmail={user?.email ?? null} onOpenAuthModal={() => setIsAuthModalOpen(true)} onSignOut={async () => { await supabase.auth.signOut(); fetchUserAndProfile(); }} isAdmin={profile?.role === "admin"} username={profile?.username} />
 
       <main className="container mx-auto px-4 py-8 flex-1 max-w-6xl">
         <Button variant="ghost" size="sm" asChild className="mb-6 -ml-2 text-muted-foreground hover:text-foreground">
@@ -787,7 +786,7 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
 
         <div className="flex flex-col lg:grid lg:grid-cols-3 gap-8 items-start">
 
-          <div className="lg:col-span-2 space-y-6 w-full order-1">
+          <div className="lg:col-span-2 w-full flex flex-col gap-6 order-1">
             <div className="flex gap-4 sm:gap-6 items-start">
               {market.image_url && <img src={market.image_url} alt="Mercado" className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl object-cover shrink-0 shadow-md border border-border/50" />}
               <div>
@@ -1018,18 +1017,9 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
               )}
             </div>
 
-          </div>
-
-          <div className="hidden lg:block mt-6">
-            {TopHoldersBlock}
-          </div>
-
-        </div>
-
-        <div className="block lg:hidden w-full order-3 mt-2">{TopHoldersBlock}</div>
-
-        <div className="lg:col-span-2 w-full order-4 lg:order-4 mt-6">
-          <Tabs defaultValue="activity" className="w-full">
+            {/* 3. Tabs de Actividad Reciente y Debate */}
+            <div className="w-full mt-2">
+              <Tabs defaultValue="activity" className="w-full">
             <TabsList className="w-full justify-start border-b border-border/50 rounded-none bg-transparent h-auto p-0 mb-6 gap-6 overflow-x-auto scrollbar-none">
               <TabsTrigger
                 value="activity"
@@ -1201,35 +1191,39 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
           </Tabs>
         </div>
 
-        <div className="lg:col-span-2 w-full order-5 mt-2 lg:mt-8">{ReglasBlock}</div>
+            {/* 4. Bloque de Reglas de Resolución */}
+            <div className="w-full mt-2">{ReglasBlock}</div>
 
-        {/* OVERLAY DEL PANEL DE APUESTAS EN MOBILE */}
-        {(selectedOptionId || selectedSellPosition) && (
-          <div
-            className="fixed inset-0 bg-black/60 z-40 lg:hidden animate-in fade-in duration-300"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setSelectedOptionId(null);
-              setSelectedSellPosition(null);
-            }}
-          />
-        )}
+          </div> {/* CIERRA COLUMNA IZQUIERDA */}
 
-        {/* CONTENEDOR DEL PANEL DE APUESTAS */}
-        <div className={cn(
-          "lg:col-span-1 lg:sticky lg:top-24 lg:w-full lg:order-2",
-          (selectedOptionId || selectedSellPosition || isMarketResolved)
-            ? "fixed bottom-0 left-0 right-0 z-50 animate-in slide-in-from-bottom duration-300 lg:static lg:animate-none lg:z-auto"
-            : "w-full order-2 hidden lg:block" // Ocultamos el panel en mobile si no hay nada seleccionado
-        )}>
-
+          {/* COLUMNA DERECHA (Panel Sticky que ocupa 1/3 en desktop) */}
           <div className={cn(
-            "border border-border/50 bg-card p-3 sm:p-4 shadow-2xl lg:shadow-xl",
+            "w-full lg:col-span-1 lg:sticky lg:top-24 lg:block order-2 z-50",
             (selectedOptionId || selectedSellPosition || isMarketResolved)
-              ? "rounded-t-3xl rounded-b-none lg:rounded-2xl max-h-[85dvh] overflow-y-auto pb-8 lg:pb-3"
-              : "rounded-2xl overflow-hidden"
+              ? "fixed bottom-0 left-0 right-0 animate-in slide-in-from-bottom duration-300"
+              : "hidden"
           )}>
+            
+            {/* 1. Overlay oscuro (solo visible en mobile) */}
+            {(selectedOptionId || selectedSellPosition) && (
+              <div
+                className="fixed inset-0 bg-black/60 z-40 lg:hidden animate-in fade-in duration-300"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setSelectedOptionId(null);
+                  setSelectedSellPosition(null);
+                }}
+              />
+            )}
+
+            {/* 2. Tarjeta del panel de Comprar/Vender */}
+            <div className={cn(
+              "border border-border/50 bg-card p-3 sm:p-4 shadow-2xl lg:shadow-xl relative z-50",
+              (selectedOptionId || selectedSellPosition || isMarketResolved)
+                ? "rounded-t-3xl rounded-b-none lg:rounded-2xl max-h-[85dvh] overflow-y-auto pb-8 lg:pb-3"
+                : "rounded-2xl overflow-hidden"
+            )}>
 
             {/* Barrita drag decorativa */}
             {(selectedOptionId || selectedSellPosition) && (
@@ -1503,7 +1497,20 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
               </Tabs>
             )}
           </div>
-        </div>
+
+            {/* 3. Bloque de Top Inversores (Envuelto en un div con 'hidden lg:block mt-6') */}
+            <div className="hidden lg:block mt-6">
+              {TopHoldersBlock}
+            </div>
+
+          </div> {/* CIERRA COLUMNA DERECHA */}
+
+          {/* TOP INVERSORES MOBILE (Fuera del flujo sticky, solo visible en celular) */}
+          <div className="block lg:hidden w-full order-3 mt-2">
+            {TopHoldersBlock}
+          </div>
+
+        </div> {/* CIERRA GRID PRINCIPAL */}
 
       </main>
 
