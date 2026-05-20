@@ -797,6 +797,16 @@ export default function AdminDashboardClient() {
                 <Label className="font-bold">Pregunta</Label>
                 <Input value={editForm.title} onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))} required className="h-12 text-base font-medium bg-muted/50" />
               </div>
+              
+              <div className="space-y-2">
+                <Label className="font-bold">Descripción (Opcional)</Label>
+                <Textarea value={editForm.description} onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))} className="resize-none h-24 text-base bg-muted/50" />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="font-bold">Link de la Imagen (Opcional)</Label>
+                <Input value={editForm.image_url} onChange={(e) => setEditForm((f) => ({ ...f, image_url: e.target.value }))} className="h-12 text-base bg-muted/50" />
+              </div>
 
               <div className="space-y-3 p-5 bg-muted/30 rounded-xl border border-border/50">
                 <Label className="font-black text-base uppercase tracking-wider mb-2 block">Editar opciones</Label>

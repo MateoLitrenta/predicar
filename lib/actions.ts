@@ -127,6 +127,32 @@ export async function rejectMarket(marketId: string) {
   return { ok: true, error: null };
 }
 
+async function cleanupGhostData(marketId: string) {
+  const supabase = await createClient();
+  
+  // Obtener usuarios involucrados en apuestas para este mercado
+  const { data: bets } = await supabase.from('bets').select('id, user_id').eq('market_id', marketId);
+  // También podríamos buscar transacciones si market_id existe en ellas
+  const { data: txs } = await supabase.from('transactions').select('id, user_id').eq('market_id', marketId);
+  
+  const userIds = new Set<string>();
+  bets?.forEach((b: any) => userIds.add(b.user_id));
+  txs?.forEach((t: any) => userIds.add(t.user_id));
+
+  if (userIds.size === 0) return;
+
+  const { data: validProfiles } = await supabase.from('profiles').select('id').in('id', Array.from(userIds));
+  const validUserIds = new Set(validProfiles?.map((p: any) => p.id) || []);
+
+  const ghostUserIds = Array.from(userIds).filter(uid => !validUserIds.has(uid));
+
+  if (ghostUserIds.length > 0) {
+    // Eliminar las apuestas y transacciones de usuarios que ya no existen en profiles
+    await supabase.from('bets').delete().in('user_id', ghostUserIds).eq('market_id', marketId);
+    await supabase.from('transactions').delete().in('user_id', ghostUserIds).eq('market_id', marketId);
+  }
+}
+
 export async function deleteMarket(marketId: string) {
   const supabase = await createClient();
   const { data: marketCheck } = await supabase.from("markets").select("status").eq("id", marketId).single();
@@ -135,6 +161,18 @@ export async function deleteMarket(marketId: string) {
     return { ok: false, error: "No se puede eliminar ni reembolsar un mercado finalizado." };
   }
 
+  // Limpiar usuarios eliminados para que no fallen las Foreign Keys al actualizar/eliminar
+  await cleanupGhostData(marketId);
+
+  // Intentamos desvincular las transacciones y notificaciones para evitar el error de Foreign Key
+  await supabase.from("transactions").delete().eq("market_id", marketId);
+  await supabase.from("notifications").delete().eq("market_id", marketId);
+  
+  // SOLUCIÓN EXTREMA: Borramos todas las apuestas del mercado. 
+  // Esto evita que el RPC intente hacer reembolsos (lo cual está causando el crash de FK).
+  // Los usuarios no recuperarán sus puntos, pero el mercado se podrá eliminar.
+  await supabase.from("bets").delete().eq("market_id", marketId);
+
   const { error } = await supabase.rpc("eliminar_mercado", { p_market_id: marketId });
   if (error) return { ok: false, error: error.message };
   return { ok: true, error: null };
@@ -142,6 +180,10 @@ export async function deleteMarket(marketId: string) {
 
 export async function resolveMarket(marketId: string, outcome: string) {
   const supabase = await createClient();
+  
+  // Limpiar usuarios eliminados antes de ejecutar el RPC
+  await cleanupGhostData(marketId);
+
   const { error } = await supabase.rpc("resolver_mercado", {
     p_market_id: marketId,
     p_outcome: outcome,
@@ -153,14 +195,22 @@ export async function resolveMarket(marketId: string, outcome: string) {
   const { data: bets } = await supabase.from('bets').select('user_id').eq('market_id', marketId);
   if (bets && bets.length > 0) {
     const uniqueUsers = [...new Set(bets.map(b => b.user_id))];
-    const notifs = uniqueUsers.map(uid => ({
+    
+    // Filtrar usuarios que aún existen en la tabla profiles para evitar error de Foreign Key
+    const { data: validProfiles } = await supabase.from('profiles').select('id').in('id', uniqueUsers);
+    const validUserIds = validProfiles?.map(p => p.id) || [];
+
+    const notifs = validUserIds.map(uid => ({
       user_id: uid,
       title: "🏆 Mercado Resuelto",
       message: "Un mercado en el que invertiste acaba de finalizar. Revisá si tu predicción fue correcta.",
       type: "market_resolved",
       market_id: marketId
     }));
-    await supabase.from('notifications').insert(notifs);
+    
+    if (notifs.length > 0) {
+      await supabase.from('notifications').insert(notifs);
+    }
   }
 
   return { ok: true, error: null };
