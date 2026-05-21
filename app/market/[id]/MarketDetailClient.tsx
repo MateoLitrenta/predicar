@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { createClient } from "@/lib/supabase/client";
 import { sellBet, sellPartialShares } from "@/lib/actions";
@@ -455,61 +456,68 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
     const now = Date.now();
     const marketCreatedAt = new Date(market.created_at).getTime();
 
-    // 1. PUNTO GÉNESIS (Exactamente equitativo al momento de creación)
+    // 1. PUNTO GÉNESIS
     const genesisPoint: any = { timestamp: marketCreatedAt };
     const totalOptsCount = options.length || 2;
     options.forEach(opt => {
       genesisPoint[opt.id] = (1 / totalOptsCount) * 100;
     });
 
-    // 2. FILTRADO DE RUIDO Y ORDENAMIENTO
-    const cleanHistory = (history || []).filter(h => h.timestamp > marketCreatedAt + 2000);
-    const rawTimeline = [genesisPoint, ...cleanHistory].sort((a, b) => a.timestamp - b.timestamp);
+    // 2. FORWARD FILL (Arrastrar último precio conocido)
+    const rawHistory = (history || [])
+      .filter(h => h.timestamp > marketCreatedAt + 2000)
+      .sort((a, b) => a.timestamp - b.timestamp);
 
-    // 3. ESTADO FINAL DE RESOLUCIÓN O PROYECCIÓN EN VIVO
+    const timeline: any[] = [genesisPoint];
+    let lastKnownState = { ...genesisPoint };
+
+    rawHistory.forEach(point => {
+      const newState = { ...lastKnownState, timestamp: point.timestamp };
+      options.forEach(opt => {
+        if (point[opt.id] !== undefined && !Number.isNaN(Number(point[opt.id]))) {
+          newState[opt.id] = Number(point[opt.id]);
+        }
+      });
+      timeline.push(newState);
+      lastKnownState = { ...newState };
+    });
+
+    // 3. ESTADO DE RESOLUCIÓN O EN VIVO
     if (market.status === 'resolved') {
       const resolvedAt = market.resolved_at 
         ? new Date(market.resolved_at).getTime() 
-        : (rawTimeline[rawTimeline.length - 1]?.timestamp || marketCreatedAt) + 1000;
+        : (timeline[timeline.length - 1].timestamp) + 1000;
       
       const resolutionPoint: any = { timestamp: resolvedAt };
       options.forEach(opt => {
         resolutionPoint[opt.id] = opt.id === market.winning_outcome ? 100 : 0;
       });
-      rawTimeline.push(resolutionPoint);
-      // Estiramos la línea recta hasta el momento actual
-      rawTimeline.push({ ...resolutionPoint, timestamp: now });
+      timeline.push(resolutionPoint);
+      timeline.push({ ...resolutionPoint, timestamp: now }); 
     } else {
-      // Mercado Activo: Calculamos el precio en este microsegundo y lo proyectamos
       const currentProbs: any = { timestamp: now };
       options.forEach(opt => {
         currentProbs[opt.id] = opt.is_eliminated ? 0 : getOptionPrice(Number(opt.total_votes || 0), false) * 100;
       });
-      rawTimeline.push(currentProbs);
+      timeline.push(currentProbs);
     }
 
-    if (chartTimeframe === 'ALL') {
-      return rawTimeline;
-    }
+    // 4. RECORTAR AL VIEWPORT (chartWindowStart)
+    if (chartTimeframe === 'ALL') return timeline;
 
-    // 4. RECORTAR AL TIMEFRAME SELECCIONADO (Viewport)
     const result: any[] = [];
-    
-    // Si la ventana de tiempo empieza DESPUÉS de que se creó el mercado, anclamos el gráfico
     if (chartWindowStart > marketCreatedAt) {
-      let baseline = rawTimeline[0];
-      for (let i = rawTimeline.length - 1; i >= 0; i--) {
-        if (rawTimeline[i].timestamp <= chartWindowStart) {
-          baseline = rawTimeline[i];
+      let baseline = timeline[0];
+      for (let i = timeline.length - 1; i >= 0; i--) {
+        if (timeline[i].timestamp <= chartWindowStart) {
+          baseline = timeline[i];
           break;
         }
       }
       result.push({ ...baseline, timestamp: chartWindowStart });
     }
 
-    // Insertamos todos los puntos que ocurrieron dentro de la ventana de tiempo
-    result.push(...rawTimeline.filter(h => h.timestamp > chartWindowStart && h.timestamp <= now));
-
+    result.push(...timeline.filter(h => h.timestamp > chartWindowStart && h.timestamp <= now));
     return result;
   }, [market, options, history, chartWindowStart, chartTimeframe, getOptionPrice]);
 
@@ -874,8 +882,7 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
                       {options.map((opt) => (
                         <Area
                           key={opt.id}
-                          type="linear"
-                          connectNulls={true}
+                          type="stepAfter"
                           dataKey={opt.id}
                           stroke={opt.color}
                           fillOpacity={1}
@@ -1011,21 +1018,23 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
             </div>
 
             <div className="w-full mt-2">
-              <Tabs defaultValue="activity" className="w-full">
-            <TabsList className="w-full justify-start border-b border-border/50 rounded-none bg-transparent h-auto p-0 mb-6 gap-6 overflow-x-auto scrollbar-none">
-              <TabsTrigger
-                value="activity"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent px-0 py-3 text-base font-bold text-muted-foreground hover:text-foreground transition-all whitespace-nowrap"
-              >
-                <TrendingUp className="w-4 h-4 mr-2" /> Actividad Reciente
-              </TabsTrigger>
-              <TabsTrigger
-                value="debate"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent px-0 py-3 text-base font-bold text-muted-foreground hover:text-foreground transition-all whitespace-nowrap"
-              >
-                <MessageSquare className="w-4 h-4 mr-2" /> Debate ({comments.length})
-              </TabsTrigger>
-            </TabsList>
+            <Tabs defaultValue="activity" className="w-full">
+              <TabsList className="grid w-full grid-cols-2 h-14 p-1.5 bg-muted/50 rounded-2xl mb-8 border border-border/50 shadow-sm">
+                <TabsTrigger
+                  value="activity"
+                  className="rounded-xl text-sm sm:text-base font-bold data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-md transition-all text-muted-foreground flex items-center justify-center gap-2"
+                >
+                  <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <span className="truncate">Actividad</span>
+                </TabsTrigger>
+                <TabsTrigger
+                  value="debate"
+                  className="rounded-xl text-sm sm:text-base font-bold data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-md transition-all text-muted-foreground flex items-center justify-center gap-2"
+                >
+                  <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <span className="truncate">Debate ({comments.length})</span>
+                </TabsTrigger>
+              </TabsList>
 
             <TabsContent value="activity" className="m-0 focus-visible:outline-none">
               <div className="rounded-xl border border-border/50 bg-card overflow-hidden shadow-sm">
@@ -1189,24 +1198,25 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
 
           <div className="w-full lg:col-span-1 lg:sticky lg:top-24 flex flex-col gap-6 order-2 z-40">
             
+            {/* BACKDROP FUERA DEL CONTENEDOR TRANSFORMADO PARA QUE CUBRA TODA LA PANTALLA */}
+            {(selectedOptionId || selectedSellPosition) && (
+              <div
+                className="fixed inset-0 bg-black/60 z-[45] lg:hidden animate-in fade-in duration-300"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setSelectedOptionId(null);
+                  setSelectedSellPosition(null);
+                }}
+              />
+            )}
+
             <div className={cn(
-              "border border-border/50 bg-card shadow-2xl lg:shadow-xl relative",
+              "border border-border/50 bg-card shadow-2xl lg:shadow-xl relative z-50",
               (selectedOptionId || selectedSellPosition || isMarketResolved)
-                ? "fixed bottom-0 left-0 right-0 z-50 animate-in slide-in-from-bottom duration-300 rounded-t-3xl rounded-b-none lg:static lg:rounded-2xl"
+                ? "fixed bottom-0 left-0 right-0 animate-in slide-in-from-bottom duration-300 rounded-t-3xl rounded-b-none lg:static lg:rounded-2xl"
                 : "rounded-2xl overflow-hidden"
             )}>
-              
-              {(selectedOptionId || selectedSellPosition) && (
-                <div
-                  className="fixed inset-0 bg-black/60 z-40 lg:hidden animate-in fade-in duration-300"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setSelectedOptionId(null);
-                    setSelectedSellPosition(null);
-                  }}
-                />
-              )}
 
               <div className={cn(
                 "p-3 sm:p-4 bg-card relative z-50",
@@ -1503,30 +1513,32 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
       </main>
 
       <Dialog open={isShareModalOpen} onOpenChange={setIsShareModalOpen}>
-        <DialogContent className="sm:max-w-md p-0 lg:p-6 fixed bottom-0 left-0 right-0 top-auto translate-y-0 rounded-t-3xl rounded-b-none border-t border-border/50 lg:static lg:rounded-2xl lg:border animate-in slide-in-from-bottom duration-300 lg:animate-none">
-          <div className="w-12 h-1.5 bg-muted rounded-full mx-auto mt-4 mb-2 lg:hidden" />
-          <DialogHeader className="px-6 pt-2 pb-0 lg:p-0">
-            <DialogTitle className="flex items-center gap-2 text-xl">
+        <DialogContent className="w-[95vw] max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl font-black">
               <Share2 className="w-5 h-5 text-primary" /> Compartir Mercado
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-base text-foreground">
               Invitá a tus amigos a predecir y debatir en este mercado.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex flex-col gap-4 p-6 pt-4 lg:p-0 lg:pt-4 pb-safe">
-            <Button variant="outline" className="w-full h-12 flex items-center justify-start gap-3 text-base border-border/50 hover:bg-muted/30 transition-colors" onClick={handleWhatsAppShare}>
-              <MessageCircle className="w-5 h-5 text-green-500" /> Compartir en WhatsApp
+          <div className="flex flex-col gap-4 py-2">
+            <Button variant="outline" className="w-full h-14 flex items-center justify-start gap-3 text-base font-bold border-border/50 hover:bg-muted/30 transition-colors shadow-sm" onClick={handleWhatsAppShare}>
+              <MessageCircle className="w-6 h-6 text-green-500" /> Compartir en WhatsApp
             </Button>
-            <Button variant="outline" className="w-full h-12 flex items-center justify-start gap-3 text-base border-border/50 hover:bg-muted/30 transition-colors" onClick={handleTwitterShare}>
-              <Twitter className="w-5 h-5 text-blue-400" /> Compartir en X (Twitter)
+            <Button variant="outline" className="w-full h-14 flex items-center justify-start gap-3 text-base font-bold border-border/50 hover:bg-muted/30 transition-colors shadow-sm" onClick={handleTwitterShare}>
+              <Twitter className="w-6 h-6 text-blue-400" /> Compartir en X (Twitter)
             </Button>
             <div className="relative mt-2">
-              <Input readOnly value={marketUrl} className="pr-12 bg-muted/20 border-border/50 h-10 text-xs sm:text-sm text-muted-foreground" />
-              <Button size="icon" variant="ghost" className="absolute right-0 top-0 h-full w-12 hover:bg-transparent" onClick={handleCopyLink}>
-                {isCopied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4 text-muted-foreground" />}
+              <Input readOnly value={marketUrl} className="pr-14 bg-muted/20 border-border/50 h-14 text-sm text-muted-foreground font-medium rounded-xl" />
+              <Button size="icon" variant="ghost" className="absolute right-0 top-0 h-full w-14 hover:bg-transparent rounded-xl" onClick={handleCopyLink}>
+                {isCopied ? <Check className="w-5 h-5 text-green-500" /> : <Copy className="w-5 h-5 text-muted-foreground" />}
               </Button>
             </div>
           </div>
+          <DialogFooter className="mt-2">
+            <Button variant="outline" className="w-full h-12 font-bold text-base" onClick={() => setIsShareModalOpen(false)}>Cerrar</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
