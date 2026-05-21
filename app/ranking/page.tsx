@@ -62,10 +62,10 @@ export default function RankingPage() {
   const topVolume = useMemo(() => [...users].sort((a, b) => b.total_volume - a.total_volume).slice(0, 10), [users]);
 
   const renderRankBadge = (index: number) => {
-    if (index === 0) return <div className="w-8 h-8 rounded-full bg-amber-500/20 text-amber-500 flex items-center justify-center font-bold text-sm shrink-0 shadow-[0_0_10px_rgba(245,158,11,0.2)]"><Medal className="w-4 h-4" /></div>;
-    if (index === 1) return <div className="w-8 h-8 rounded-full bg-slate-400/20 text-slate-400 flex items-center justify-center font-bold text-sm shrink-0 shadow-[0_0_10px_rgba(148,163,184,0.2)]"><Medal className="w-4 h-4" /></div>;
-    if (index === 2) return <div className="w-8 h-8 rounded-full bg-orange-600/20 text-orange-500 flex items-center justify-center font-bold text-sm shrink-0 shadow-[0_0_10px_rgba(234,88,12,0.2)]"><Medal className="w-4 h-4" /></div>;
-    return <div className="w-8 h-8 rounded-full bg-muted/50 text-muted-foreground flex items-center justify-center font-bold text-xs shrink-0">{index + 1}</div>;
+    if (index === 0) return <div className="w-6 h-6 md:w-8 md:h-8 rounded-full bg-amber-500/20 text-amber-500 flex items-center justify-center font-bold text-xs md:text-sm shrink-0 shadow-[0_0_10px_rgba(245,158,11,0.2)]"><Medal className="w-3 h-3 md:w-4 md:h-4" /></div>;
+    if (index === 1) return <div className="w-6 h-6 md:w-8 md:h-8 rounded-full bg-slate-400/20 text-slate-400 flex items-center justify-center font-bold text-xs md:text-sm shrink-0 shadow-[0_0_10px_rgba(148,163,184,0.2)]"><Medal className="w-3 h-3 md:w-4 md:h-4" /></div>;
+    if (index === 2) return <div className="w-6 h-6 md:w-8 md:h-8 rounded-full bg-orange-600/20 text-orange-500 flex items-center justify-center font-bold text-xs md:text-sm shrink-0 shadow-[0_0_10px_rgba(234,88,12,0.2)]"><Medal className="w-3 h-3 md:w-4 md:h-4" /></div>;
+    return <div className="w-6 h-6 md:w-8 md:h-8 rounded-full bg-muted/50 text-muted-foreground flex items-center justify-center font-bold text-[10px] md:text-xs shrink-0">{index + 1}</div>;
   };
 
   // --- ACÁ ESTÁ EL SKELETON LOADER PARA EL RANKING ---
@@ -224,34 +224,34 @@ export default function RankingPage() {
                       return (
                         <Link href={`/profile/${user.user_id}`} key={`roi-${user.user_id}`}>
                           <div className={cn(
-                            "flex items-center justify-between p-3 sm:p-4 rounded-xl transition-all cursor-pointer border",
+                            "flex items-center justify-between p-2.5 sm:p-4 rounded-xl transition-all cursor-pointer border",
                             isMe 
                               ? "bg-primary/10 border-primary/30 hover:bg-primary/20 shadow-sm" 
                               : "bg-muted/10 border-transparent hover:bg-muted/40 hover:border-border/50"
                           )}>
-                            <div className="flex items-center gap-4 overflow-hidden">
+                            <div className="flex items-center gap-2.5 md:gap-4 overflow-hidden">
                               {renderRankBadge(i)}
                               
-                              <div className="w-10 h-10 rounded-full bg-background flex items-center justify-center overflow-hidden shrink-0 border-2 border-muted">
-                                {user.avatar_url ? <img src={user.avatar_url} alt="av" className="w-full h-full object-cover" /> : <User className="w-4 h-4 text-muted-foreground" />}
+                              <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-background flex items-center justify-center overflow-hidden shrink-0 border-2 border-muted">
+                                {user.avatar_url ? <img src={user.avatar_url} alt="av" className="w-full h-full object-cover" /> : <User className="w-3 h-3 md:w-4 md:h-4 text-muted-foreground" />}
                               </div>
                               
                               <div className="flex flex-col min-w-0">
-                                <span className={cn("font-bold text-base truncate flex items-center gap-2", isMe ? "text-primary" : "text-foreground")}>
+                                <span className={cn("font-bold text-sm md:text-base truncate flex items-center gap-2", isMe ? "text-primary" : "text-foreground")}>
                                   {user.username}
                                   {isMe && <Badge className="bg-primary text-primary-foreground text-[9px] px-1.5 py-0 uppercase h-4">Vos</Badge>}
                                 </span>
-                                <span className="text-xs font-medium text-muted-foreground">
+                                <span className="text-[10px] md:text-xs font-medium text-muted-foreground">
                                   {user.portfolio_value.toLocaleString()} pts totales
                                 </span>
                               </div>
                             </div>
 
-                            <div className="flex items-center shrink-0 pl-4">
+                            <div className="flex items-center shrink-0 pl-2 md:pl-4">
                               <Badge 
                                 variant="outline" 
                                 className={cn(
-                                  "text-sm md:text-base px-3 py-1 font-black border-2", 
+                                  "text-xs md:text-base px-2 py-0.5 md:px-3 md:py-1 font-black border-2", 
                                   isProfit ? "bg-green-500/10 text-green-600 dark:text-[#00FF00] border-green-500/30" : "bg-red-500/10 text-red-600 dark:text-[#FF0000] border-red-500/30"
                                 )}
                               >

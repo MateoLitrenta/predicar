@@ -26,6 +26,12 @@ import { cn } from "@/lib/utils";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { useTheme } from "@/components/theme-provider";
 
+const XIcon = ({ className }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" aria-hidden="true" className={className} fill="currentColor">
+    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 24.95H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+  </svg>
+);
+
 interface MarketDetailClientProps {
   marketId: string;
 }
@@ -779,7 +785,7 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
         </Button>
 
         <div className="flex flex-col lg:grid lg:grid-cols-3 gap-8 items-start">
-          <div className="lg:col-span-2 w-full flex flex-col gap-6 order-1">
+          <div className="lg:col-span-2 w-full flex flex-col gap-6 order-1 lg:order-1">
             <div className="flex gap-4 sm:gap-6 items-start">
               {market.image_url && <img src={market.image_url} alt="Mercado" className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl object-cover shrink-0 shadow-md border border-border/50" />}
               <div>
@@ -813,7 +819,7 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
 
             {market.description && <div className="p-5 rounded-xl bg-muted/30 border border-border/50 text-muted-foreground leading-relaxed">{market.description}</div>}
 
-            <div className="p-6 rounded-xl border border-border/50 bg-card shadow-sm">
+            <div className="p-4 sm:p-6 rounded-xl border border-border/50 bg-card shadow-sm">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                 <h3 className="font-semibold flex items-center gap-2">
                   <LineChartIcon className="w-5 h-5 text-primary" /> Tendencia del Mercado
@@ -835,7 +841,7 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
               </div>
 
               {filteredHistory.length > 0 ? (
-                <div className="h-[300px] w-full mt-4 mb-2">
+                <div className="h-[220px] sm:h-[300px] w-full mt-4 mb-2">
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={filteredHistory} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                       <defs>
@@ -899,7 +905,7 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
                   </ResponsiveContainer>
                 </div>
               ) : (
-                <div className="h-[300px] w-full mt-4 mb-2 flex items-center justify-center border-2 border-dashed border-border/50 rounded-xl bg-muted/10">
+                <div className="h-[220px] sm:h-[300px] w-full mt-4 mb-2 flex items-center justify-center border-2 border-dashed border-border/50 rounded-xl bg-muted/10">
                   <p className="text-sm font-medium text-muted-foreground">No hay actividad en este período.</p>
                 </div>
               )}
@@ -1017,6 +1023,10 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
               )}
             </div>
 
+          </div>
+
+          {/* TABS (Actividad / Debate) */}
+          <div className="lg:col-span-2 w-full flex flex-col gap-6 order-3 lg:order-3">
             <div className="w-full mt-2">
             <Tabs defaultValue="activity" className="w-full">
               <TabsList className="grid w-full grid-cols-2 h-14 p-1.5 bg-muted/50 rounded-2xl mb-8 border border-border/50 shadow-sm">
@@ -1166,7 +1176,7 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
             </TabsContent>
 
             <TabsContent value="debate" className="m-0 focus-visible:outline-none">
-              <div className="bg-card rounded-xl border border-border/50 p-6 shadow-sm">
+              <div className="bg-card rounded-xl border border-border/50 p-4 sm:p-6 shadow-sm">
                 <div className="mb-6">
                   {replyingTo && (
                     <div className="flex items-center justify-between bg-primary/10 text-primary px-3 py-2 rounded-lg mb-3 text-sm">
@@ -1190,13 +1200,10 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
               </div>
             </TabsContent>
           </Tabs>
-            </div>
-
-            <div className="w-full mt-2">{ReglasBlock}</div>
-
+          </div>
           </div>
 
-          <div className="w-full lg:col-span-1 lg:sticky lg:top-24 flex flex-col gap-6 order-2 z-40">
+          <div className="w-full lg:col-span-1 lg:sticky lg:top-24 flex flex-col gap-6 order-2 lg:order-2 z-40">
             
             {/* BACKDROP FUERA DEL CONTENEDOR TRANSFORMADO PARA QUE CUBRA TODA LA PANTALLA */}
             {(selectedOptionId || selectedSellPosition) && (
@@ -1503,41 +1510,47 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
             </div>
 
           </div>
+        </div>
+        
+        <div className="w-full max-w-2xl mx-auto lg:max-w-none lg:mx-0 mt-8">
+          {ReglasBlock}
+        </div>
 
-          <div className="block lg:hidden w-full order-3 mt-2">
-            {TopHoldersBlock}
-          </div>
-
+        <div className="block lg:hidden w-full mt-6">
+          {TopHoldersBlock}
         </div>
 
       </main>
 
       <Dialog open={isShareModalOpen} onOpenChange={setIsShareModalOpen}>
-        <DialogContent className="w-[95vw] max-w-md rounded-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-xl font-black">
-              <Share2 className="w-5 h-5 text-primary" /> Compartir Mercado
+        <DialogContent className="w-[95vw] max-w-md rounded-[24px] border-border/50 bg-background/95 backdrop-blur-xl p-6 shadow-2xl">
+          <DialogHeader className="mb-2">
+            <DialogTitle className="flex items-center gap-2.5 text-2xl font-black">
+              <Share2 className="w-6 h-6 text-primary" /> Compartir Mercado
             </DialogTitle>
-            <DialogDescription className="text-base text-foreground">
+            <DialogDescription className="text-base text-muted-foreground font-medium mt-1">
               Invitá a tus amigos a predecir y debatir en este mercado.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex flex-col gap-4 py-2">
-            <Button variant="outline" className="w-full h-14 flex items-center justify-start gap-3 text-base font-bold border-border/50 hover:bg-muted/30 transition-colors shadow-sm" onClick={handleWhatsAppShare}>
+          <div className="flex flex-col gap-3 py-2">
+            <Button variant="outline" className="w-full h-14 flex items-center justify-start gap-3.5 text-base font-bold border-border/50 hover:bg-green-500/10 hover:text-green-500 hover:border-green-500/30 transition-all rounded-xl" onClick={handleWhatsAppShare}>
               <MessageCircle className="w-6 h-6 text-green-500" /> Compartir en WhatsApp
             </Button>
-            <Button variant="outline" className="w-full h-14 flex items-center justify-start gap-3 text-base font-bold border-border/50 hover:bg-muted/30 transition-colors shadow-sm" onClick={handleTwitterShare}>
-              <Twitter className="w-6 h-6 text-blue-400" /> Compartir en X (Twitter)
+            <Button variant="outline" className="w-full h-14 flex items-center justify-start gap-3.5 text-base font-bold border-border/50 hover:bg-foreground/5 hover:text-foreground hover:border-foreground/30 transition-all rounded-xl" onClick={handleTwitterShare}>
+              <XIcon className="w-5 h-5" /> Compartir en X
             </Button>
-            <div className="relative mt-2">
-              <Input readOnly value={marketUrl} className="pr-14 bg-muted/20 border-border/50 h-14 text-sm text-muted-foreground font-medium rounded-xl" />
-              <Button size="icon" variant="ghost" className="absolute right-0 top-0 h-full w-14 hover:bg-transparent rounded-xl" onClick={handleCopyLink}>
-                {isCopied ? <Check className="w-5 h-5 text-green-500" /> : <Copy className="w-5 h-5 text-muted-foreground" />}
-              </Button>
+            <div className="mt-2 flex flex-col gap-2">
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground ml-1">Enlace del mercado</Label>
+              <div className="relative group">
+                <Input readOnly value={marketUrl} className="pr-24 bg-muted/30 border-border/50 h-14 text-sm text-foreground font-medium rounded-xl truncate focus-visible:ring-primary/30 transition-all" />
+                <Button size="sm" variant={isCopied ? "default" : "secondary"} className={cn("absolute right-1.5 top-1.5 bottom-1.5 h-11 px-4 font-bold rounded-lg transition-all", isCopied ? "bg-green-500 hover:bg-green-600 text-white" : "hover:bg-muted-foreground/10")} onClick={handleCopyLink}>
+                  {isCopied ? <><Check className="w-4 h-4 mr-1.5" /> Copiado</> : <><Copy className="w-4 h-4 mr-1.5" /> Copiar</>}
+                </Button>
+              </div>
             </div>
           </div>
-          <DialogFooter className="mt-2">
-            <Button variant="outline" className="w-full h-12 font-bold text-base" onClick={() => setIsShareModalOpen(false)}>Cerrar</Button>
+          <DialogFooter className="mt-2 sm:justify-center">
+            <Button variant="ghost" className="w-full h-12 font-bold text-base rounded-xl text-muted-foreground hover:text-foreground" onClick={() => setIsShareModalOpen(false)}>Cerrar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
