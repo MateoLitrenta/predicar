@@ -264,11 +264,11 @@ export function NavHeader({
 
           <Link href="/" className="flex items-center hover:opacity-90 transition-opacity py-2 group mr-4 gap-2.5">
             <div className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 bg-primary rounded-[12px] shadow-sm transition-transform group-hover:scale-105">
-              <span className="text-primary-foreground font-medium text-xl sm:text-2xl">
+              <span className="text-[oklch(0.12_0.01_240)] font-extrabold text-2xl sm:text-3xl pb-1 leading-none">
                 z
               </span>
             </div>
-            <span className="text-2xl sm:text-3xl font-medium tracking-tight text-foreground">
+            <span className="text-2xl sm:text-3xl font-medium tracking-tight text-[oklch(0.12_0.01_240)] dark:text-foreground">
               Zéilo
             </span>
           </Link>

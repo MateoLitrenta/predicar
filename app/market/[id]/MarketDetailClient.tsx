@@ -540,7 +540,7 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
     if (chartTimeframe === '1W' || chartTimeframe === '1M') {
       return date.toLocaleDateString('es-AR', { day: '2-digit', month: 'short' });
     }
-    return date.toLocaleDateString('es-AR', { month: 'short', year: '2-digit' });
+    return date.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: '2-digit' });
   };
 
   const marketPositionSummary = useMemo(() => {
@@ -857,7 +857,10 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
                         type="number"
                         domain={
                           chartTimeframe === 'ALL'
-                            ? ['dataMin', 'dataMax']
+                            ? [
+                                new Date(market.created_at).getTime() - Math.max(3600000, (Date.now() - new Date(market.created_at).getTime()) * 0.05),
+                                Date.now()
+                              ]
                             : [chartWindowStart, Date.now()]
                         }
                         tickFormatter={formatXAxis}
@@ -1032,14 +1035,14 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
               <TabsList className="grid w-full grid-cols-2 h-14 p-1.5 bg-muted/50 rounded-2xl mb-8 border border-border/50 shadow-sm">
                 <TabsTrigger
                   value="activity"
-                  className="rounded-xl text-sm sm:text-base font-bold data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-md transition-all text-muted-foreground flex items-center justify-center gap-2"
+                  className="rounded-xl text-sm sm:text-base font-bold data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-md transition-all text-muted-foreground flex items-center justify-center gap-2"
                 >
                   <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
                   <span className="truncate">Actividad</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value="debate"
-                  className="rounded-xl text-sm sm:text-base font-bold data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-md transition-all text-muted-foreground flex items-center justify-center gap-2"
+                  className="rounded-xl text-sm sm:text-base font-bold data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-md transition-all text-muted-foreground flex items-center justify-center gap-2"
                 >
                   <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5" />
                   <span className="truncate">Debate ({comments.length})</span>
