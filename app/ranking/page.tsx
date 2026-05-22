@@ -170,7 +170,7 @@ export default function RankingPage() {
               <Trophy className="w-8 h-8 md:w-10 md:h-10 text-primary" /> Leaderboard
             </h1>
             <p className="text-muted-foreground mt-2 text-sm md:text-base font-medium max-w-xl">
-              El Salón de la Fama de PREDIX. Los mejores traders clasificados por su porcentaje de rentabilidad (ROI).
+              El Salón de la Fama de ZÉILO. Los mejores traders clasificados por su porcentaje de rentabilidad (ROI).
             </p>
           </div>
         </div>

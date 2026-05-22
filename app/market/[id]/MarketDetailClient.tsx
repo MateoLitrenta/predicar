@@ -229,12 +229,12 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
   };
 
   const handleTwitterShare = () => {
-    const text = encodeURIComponent(`¡Mirá este mercado en PREDIX! ${market?.title} ¿Qué opinás?\n\n`);
+    const text = encodeURIComponent(`¡Mirá este mercado en ZÉILO! ${market?.title} ¿Qué opinás?\n\n`);
     window.open(`https://twitter.com/intent/tweet?text=${text}&url=${encodeURIComponent(marketUrl)}`, '_blank');
   };
 
   const handleWhatsAppShare = () => {
-    const text = encodeURIComponent(`¡Mirá este mercado en PREDIX!\n*${market?.title}*\n\nEntrá y hacé tu predicción acá: ${marketUrl}`);
+    const text = encodeURIComponent(`¡Mirá este mercado en ZÉILO!\n*${market?.title}*\n\nEntrá y hacé tu predicción acá: ${marketUrl}`);
     window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
   };
 
@@ -737,12 +737,12 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
         <div>
           <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Criterio de Cierre</p>
           <p className="text-sm font-medium text-foreground leading-relaxed text-pretty">
-            El mercado se suspenderá automáticamente el día <span className="font-bold text-primary">{new Date(market.end_date).toLocaleDateString()}</span>. Las posiciones quedarán bloqueadas hasta que el administrador del mercado cargue el resultado oficial. Si el evento se pospone indefinidamente o resulta en un escenario imposible de dirimir, PREDIX se reserva el derecho de anular el mercado, devolviendo los puntos intactos a los inversores.
+            El mercado se suspenderá automáticamente el día <span className="font-bold text-primary">{new Date(market.end_date).toLocaleDateString()}</span>. Las posiciones quedarán bloqueadas hasta que el administrador del mercado cargue el resultado oficial. Si el evento se pospone indefinidamente o resulta en un escenario imposible de dirimir, ZÉILO se reserva el derecho de anular el mercado, devolviendo los puntos intactos a los inversores.
           </p>
         </div>
         <div className="flex items-start gap-3 text-xs font-medium text-amber-600 dark:text-amber-500 bg-amber-500/10 p-3 rounded-lg border border-amber-500/20 mt-2">
           <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
-          <span className="leading-relaxed">Al comprar acciones en este mercado, aceptás someterte a estas reglas de resolución y a la decisión final e inapelable del comité de PREDIX.</span>
+          <span className="leading-relaxed">Al comprar acciones en este mercado, aceptás someterte a estas reglas de resolución y a la decisión final e inapelable del comité de ZÉILO.</span>
         </div>
       </div>
     </div>

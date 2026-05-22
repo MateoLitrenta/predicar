@@ -262,21 +262,15 @@ export function NavHeader({
       <div className="container mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
 
-          <Link href="/" className="flex items-center hover:opacity-90 transition-opacity py-2 group mr-4">
-            <div className="flex items-baseline">
-              <span className="text-2xl sm:text-3xl font-black tracking-tighter text-foreground">
-                PREDI
+          <Link href="/" className="flex items-center hover:opacity-90 transition-opacity py-2 group mr-4 gap-2.5">
+            <div className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 bg-primary rounded-[12px] shadow-sm transition-transform group-hover:scale-105">
+              <span className="text-primary-foreground font-medium text-xl sm:text-2xl">
+                z
               </span>
-              <div className="relative">
-                <span className="text-2xl sm:text-3xl font-black tracking-tighter text-amber-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.3)]">
-                  X
-                </span>
-                <TrendingUp
-                  className="absolute -top-2.5 -right-5 w-6 h-6 text-amber-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.4)] group-hover:-translate-y-1 group-hover:translate-x-1 transition-transform duration-300"
-                  strokeWidth={3}
-                />
-              </div>
             </div>
+            <span className="text-2xl sm:text-3xl font-medium tracking-tight text-foreground">
+              Zéilo
+            </span>
           </Link>
 
           <div className="hidden md:flex items-center gap-3">

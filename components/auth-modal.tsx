@@ -179,7 +179,7 @@ export function AuthModal({
       }
     }
 
-    toast({ title: "¡Cuenta creada!", description: "Bienvenido a PREDIX." });
+    toast({ title: "¡Cuenta creada!", description: "Bienvenido a ZÉILO." });
     onAuthSuccess();
     onClose();
     setIsLoading(false);
@@ -192,7 +192,7 @@ export function AuthModal({
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle className="text-center text-2xl font-bold">
-            Bienvenido a <span className="text-primary">PREDIX</span>
+            Bienvenido a <span className="text-primary">ZÉILO</span>
           </DialogTitle>
           <DialogDescription className="text-center">
             {activeTab === "login" ? "Iniciá sesión para seguir jugando." : "Creá tu cuenta y empezá a predecir."}
