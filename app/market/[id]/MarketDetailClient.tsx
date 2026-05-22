@@ -843,7 +843,7 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
               {filteredHistory.length > 0 ? (
                 <div className="h-[220px] sm:h-[300px] w-full mt-4 mb-2">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={filteredHistory} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <AreaChart data={filteredHistory} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                       <defs>
                         {activeOptions.map((opt) => (
                           <linearGradient key={`grad-${opt.id}`} id={`color-${opt.id}`} x1="0" y1="0" x2="0" y2="1">
@@ -1032,17 +1032,17 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
           <div className="lg:col-span-2 w-full flex flex-col gap-6 order-3 lg:order-3">
             <div className="w-full mt-2">
             <Tabs defaultValue="activity" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 h-14 p-1.5 bg-muted/50 rounded-2xl mb-8 border border-border/50 shadow-sm">
+              <TabsList className="grid w-full grid-cols-2 h-14 p-1.5 bg-muted/50 rounded-xl mb-8 border border-border/50 shadow-sm">
                 <TabsTrigger
                   value="activity"
-                  className="rounded-xl text-sm sm:text-base font-bold data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-md transition-all text-muted-foreground flex items-center justify-center gap-2"
+                  className="rounded-lg text-sm sm:text-base font-bold data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-md transition-all text-muted-foreground flex items-center justify-center gap-2"
                 >
                   <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
                   <span className="truncate">Actividad</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value="debate"
-                  className="rounded-xl text-sm sm:text-base font-bold data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-md transition-all text-muted-foreground flex items-center justify-center gap-2"
+                  className="rounded-lg text-sm sm:text-base font-bold data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-md transition-all text-muted-foreground flex items-center justify-center gap-2"
                 >
                   <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5" />
                   <span className="truncate">Debate ({comments.length})</span>
