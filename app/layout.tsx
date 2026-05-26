@@ -8,6 +8,7 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://zeilo.app'),
   title: 'Zéilo - Mercado de Predicciones',
   description: 'Operá sobre el futuro y ganá puntos. La plataforma global de mercados predictivos.',
   generator: 'v0.app',
