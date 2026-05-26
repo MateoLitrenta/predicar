@@ -43,21 +43,21 @@ const CustomTooltip = ({ active, payload, label }: any) => {
     const sortedPayload = [...payload].sort((a, b) => b.value - a.value);
 
     return (
-      <div className="bg-background/95 border border-border/50 p-3.5 rounded-xl shadow-2xl backdrop-blur-md min-w-[160px]">
-        <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-3 border-b border-border/50 pb-2">
-          {new Date(label).toLocaleString('es-AR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-        </p>
-        <div className="space-y-2.5">
+      <div className="flex flex-col items-center pointer-events-none -mt-4">
+        <div className="bg-background/80 backdrop-blur-md text-[10px] font-bold text-muted-foreground px-2 py-0.5 rounded mb-1.5 border border-border/50 shadow-sm">
+          {new Date(label).toLocaleString('es-AR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).toUpperCase()}
+        </div>
+        <div className="flex flex-col gap-1 w-full bg-background/95 backdrop-blur-md border border-border/50 p-2 rounded-lg shadow-xl">
           {sortedPayload.map((entry: any, index: number) => (
-            <div key={index} className="flex items-center justify-between gap-6">
-              <div className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full shadow-sm" style={{ backgroundColor: entry.color }} />
-                <span className="text-sm font-semibold text-foreground truncate max-w-[120px]">
+            <div key={index} className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: entry.color }} />
+                <span className="text-[11px] font-semibold text-foreground/90 truncate max-w-[90px]">
                   {entry.name}
                 </span>
               </div>
-              <span className="text-base font-black" style={{ color: entry.color }}>
-                {Math.round(entry.value)}%
+              <span className="text-[11px] font-black" style={{ color: entry.color }}>
+                {entry.value.toFixed(1)}%
               </span>
             </div>
           ))}
@@ -509,21 +509,47 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
     }
 
     // 4. RECORTAR AL VIEWPORT (chartWindowStart)
-    if (chartTimeframe === 'ALL') return timeline;
-
-    const result: any[] = [];
-    if (chartWindowStart > marketCreatedAt) {
-      let baseline = timeline[0];
-      for (let i = timeline.length - 1; i >= 0; i--) {
-        if (timeline[i].timestamp <= chartWindowStart) {
-          baseline = timeline[i];
-          break;
+    let result: any[] = [];
+    if (chartTimeframe === 'ALL') {
+      result = timeline;
+    } else {
+      if (chartWindowStart > marketCreatedAt) {
+        let baseline = timeline[0];
+        for (let i = timeline.length - 1; i >= 0; i--) {
+          if (timeline[i].timestamp <= chartWindowStart) {
+            baseline = timeline[i];
+            break;
+          }
         }
+        result.push({ ...baseline, timestamp: chartWindowStart });
       }
-      result.push({ ...baseline, timestamp: chartWindowStart });
+      result.push(...timeline.filter(h => h.timestamp > chartWindowStart && h.timestamp <= now));
     }
 
-    result.push(...timeline.filter(h => h.timestamp > chartWindowStart && h.timestamp <= now));
+    // 5. DENSIFY TIMELINE PARA TOOLTIP CONTINUO
+    const denseResult = [];
+    if (result.length > 0) {
+      const minT = result[0].timestamp;
+      const maxT = result[result.length - 1].timestamp;
+      // Generamos puntos intermedios para que el mouse no salte en vacíos grandes
+      const step = Math.max(1000, (maxT - minT) / 150);
+
+      let currentIndex = 0;
+      for (let t = minT; t <= maxT; t += step) {
+        while (currentIndex < result.length - 1 && result[currentIndex + 1].timestamp <= t) {
+          denseResult.push(result[currentIndex]);
+          currentIndex++;
+        }
+        if (denseResult.length === 0 || denseResult[denseResult.length - 1].timestamp !== t) {
+          denseResult.push({ ...result[currentIndex], timestamp: t });
+        }
+      }
+      if (denseResult[denseResult.length - 1].timestamp !== maxT) {
+        denseResult.push(result[result.length - 1]);
+      }
+      return denseResult;
+    }
+
     return result;
   }, [market, options, history, chartWindowStart, chartTimeframe, getOptionPrice]);
 
@@ -885,7 +911,8 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
 
                       <Tooltip
                         content={<CustomTooltip />}
-                        cursor={{ stroke: axisTextColor, strokeWidth: 1.5, strokeDasharray: '4 4', opacity: 0.5 }}
+                        cursor={{ stroke: axisTextColor, strokeWidth: 1.5, strokeDasharray: 'none', opacity: 0.3 }}
+                        isAnimationActive={false}
                       />
 
                       {options.map((opt) => (
@@ -898,7 +925,7 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
                           fill={`url(#color-${opt.id})`}
                           strokeWidth={dynamicStrokeWidth}
                           dot={false}
-                          activeDot={{ r: 6, strokeWidth: 0, fill: opt.color }}
+                          activeDot={{ r: 4, strokeWidth: 0, fill: opt.color }}
                           name={opt.option_name}
                           isAnimationActive={true}
                           animationDuration={500}
