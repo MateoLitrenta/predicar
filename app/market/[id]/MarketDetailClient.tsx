@@ -962,11 +962,11 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
                 </div>
               ) : (
                 <>
-                  <div className="flex justify-between px-2 text-xs font-bold text-muted-foreground uppercase mb-2 mt-4">
+                  <div className="flex justify-between px-2 sm:px-4 text-xs font-bold text-muted-foreground uppercase mb-2 mt-4">
                     <span>Posibles Resultados</span>
-                    <div className="flex items-center gap-8 sm:gap-24 pr-2 sm:pr-8">
-                      <span className="hidden sm:block">Chance</span>
-                      <span>Operar</span>
+                    <div className="hidden sm:flex items-center gap-4">
+                      <span className="w-24 text-center mr-16">Chance</span>
+                      <span className="w-[180px] text-center">Operar</span>
                     </div>
                   </div>
                   {[...options].sort((a, b) => {
@@ -993,8 +993,8 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
                         (isMarketClosed && !isWinner) && "opacity-60",
                         isEliminated && "opacity-50 grayscale"
                       )}>
-                        <div className="flex items-center justify-between sm:justify-start w-full sm:w-auto flex-1 gap-3 min-w-0">
-                          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                        <div className="flex items-center justify-between w-full sm:w-auto sm:flex-1 gap-3 min-w-0">
+                          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
                             <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full shadow-inner shrink-0" style={{ backgroundColor: isEliminated ? '#dc2626' : opt.color }} />
                             <span className={cn("font-bold text-base sm:text-lg truncate", isWinner ? "text-primary" : "text-foreground", isEliminated && "line-through")}>
                               {opt.option_name}
@@ -1002,7 +1002,7 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
                             </span>
                           </div>
                           
-                          <div className="flex justify-end sm:justify-center w-16 sm:w-20 shrink-0">
+                          <div className="flex justify-end sm:justify-center w-16 sm:w-24 shrink-0 sm:mr-16">
                             <span className={cn("font-black text-lg sm:text-xl", isWinner ? "text-primary" : isEliminated ? "text-red-500 font-bold" : "text-foreground")}>
                               {isEliminated ? "No" : `${yesCents}%`}
                             </span>
