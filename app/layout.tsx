@@ -46,7 +46,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className={`font-sans antialiased`}>
+      <body className={`${_geist.className} antialiased`}>
         <ThemeProvider>
           {children}
           <Toaster />

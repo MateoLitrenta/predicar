@@ -816,19 +816,21 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
               {market.image_url && <img src={market.image_url} alt="Mercado" className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl object-cover shrink-0 shadow-md border border-border/50" />}
               <div>
                 <div className="flex flex-wrap gap-2 mb-3 items-center">
-                  <Badge variant="secondary" className="capitalize">{market.category}</Badge>
+                  <Badge variant="secondary" className="uppercase text-[10px] font-bold tracking-wider rounded-lg px-2.5 py-1 bg-muted/50 text-muted-foreground border-border/40">
+                    {market.category}
+                  </Badge>
 
                   {isMarketResolved ? (
-                    <Badge variant="default" className="bg-primary/20 text-primary hover:bg-primary/30 border-primary/30 gap-1.5 font-bold">
+                    <Badge variant="default" className="bg-primary/20 text-primary hover:bg-primary/30 border-primary/30 gap-1.5 font-bold rounded-lg">
                       <CheckCircle2 className="w-3 h-3" /> Resuelto
                     </Badge>
                   ) : isMarketClosed ? (
-                    <Badge variant="destructive" className="bg-red-500/10 text-red-500 hover:bg-red-500/20 border-red-500/30 gap-1.5 font-bold">
+                    <Badge variant="destructive" className="bg-red-500/10 text-red-500 hover:bg-red-500/20 border-red-500/30 gap-1.5 font-bold rounded-lg">
                       <Lock className="w-3 h-3" /> Cerrado
                     </Badge>
                   ) : null}
 
-                  <Button variant="outline" size="sm" className="h-6 px-3 text-[10px] uppercase font-bold rounded-full flex items-center gap-1.5 border-border/50 hover:bg-primary/10 hover:text-primary transition-colors" onClick={() => setIsShareModalOpen(true)}>
+                  <Button variant="outline" size="sm" className="h-6 px-3 text-[10px] uppercase font-bold rounded-lg flex items-center gap-1.5 border-border/60 bg-card hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-all shadow-sm" onClick={() => setIsShareModalOpen(true)}>
                     <Share2 className="w-3 h-3" /> Compartir
                   </Button>
                 </div>
@@ -842,8 +844,6 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
                 </div>
               </div>
             </div>
-
-            {market.description && <div className="p-5 rounded-xl bg-muted/30 border border-border/50 text-muted-foreground leading-relaxed">{market.description}</div>}
 
             <div className="p-4 sm:p-6 rounded-xl border border-border/50 bg-card shadow-sm">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -870,14 +870,6 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
                 <div className="h-[220px] sm:h-[300px] w-full mt-4 mb-2">
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={filteredHistory} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                      <defs>
-                        {activeOptions.map((opt) => (
-                          <linearGradient key={`grad-${opt.id}`} id={`color-${opt.id}`} x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor={opt.color} stopOpacity={0.4} />
-                            <stop offset="95%" stopColor={opt.color} stopOpacity={0} />
-                          </linearGradient>
-                        ))}
-                      </defs>
                       <XAxis
                         dataKey="timestamp"
                         type="number"
@@ -889,6 +881,7 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
                               ]
                             : [chartWindowStart, Date.now()]
                         }
+                        padding={{ right: 30 }}
                         tickFormatter={formatXAxis}
                         allowDataOverflow
                         stroke={axisTextColor}
@@ -921,8 +914,8 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
                           type="stepAfter"
                           dataKey={opt.id}
                           stroke={opt.color}
-                          fillOpacity={1}
-                          fill={`url(#color-${opt.id})`}
+                          fillOpacity={0}
+                          fill="transparent"
                           strokeWidth={dynamicStrokeWidth}
                           dot={false}
                           activeDot={{ r: 4, strokeWidth: 0, fill: opt.color }}
@@ -995,26 +988,28 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
 
                     return (
                       <div key={opt.id} className={cn(
-                        "flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-4 rounded-xl border transition-colors gap-4",
+                        "flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-4 rounded-xl border transition-colors gap-3 sm:gap-4",
                         isWinner ? "border-primary/50 bg-primary/5 shadow-[0_0_15px_rgba(var(--primary),0.1)]" : "border-border/50 bg-card",
                         (isMarketClosed && !isWinner) && "opacity-60",
                         isEliminated && "opacity-50 grayscale"
                       )}>
-                        <div className="flex items-center gap-3 flex-1 min-w-0">
-                          <div className="w-4 h-4 rounded-full shadow-inner shrink-0" style={{ backgroundColor: isEliminated ? '#dc2626' : opt.color }} />
-                          <span className={cn("font-bold text-base sm:text-lg truncate", isWinner ? "text-primary" : "text-foreground", isEliminated && "line-through")}>
-                            {opt.option_name}
-                            {isWinner && <Badge className="ml-2 bg-primary text-primary-foreground text-[10px] uppercase">Ganador</Badge>}
-                          </span>
+                        <div className="flex items-center justify-between sm:justify-start w-full sm:w-auto flex-1 gap-3 min-w-0">
+                          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                            <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full shadow-inner shrink-0" style={{ backgroundColor: isEliminated ? '#dc2626' : opt.color }} />
+                            <span className={cn("font-bold text-base sm:text-lg truncate", isWinner ? "text-primary" : "text-foreground", isEliminated && "line-through")}>
+                              {opt.option_name}
+                              {isWinner && <Badge className="ml-2 bg-primary text-primary-foreground text-[10px] uppercase">Ganador</Badge>}
+                            </span>
+                          </div>
+                          
+                          <div className="flex justify-end sm:justify-center w-16 sm:w-20 shrink-0">
+                            <span className={cn("font-black text-lg sm:text-xl", isWinner ? "text-primary" : isEliminated ? "text-red-500 font-bold" : "text-foreground")}>
+                              {isEliminated ? "No" : `${yesCents}%`}
+                            </span>
+                          </div>
                         </div>
 
-                        <div className="flex justify-start sm:justify-center w-16 sm:w-20 shrink-0 pl-7 sm:pl-0">
-                          <span className={cn("font-black text-xl", isWinner ? "text-primary" : isEliminated ? "text-red-500 font-bold" : "text-foreground")}>
-                            {isEliminated ? "No" : `${yesCents}%`}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center justify-end w-full sm:w-[180px] shrink-0 mt-2 sm:mt-0">
+                        <div className="flex items-center justify-end w-full sm:w-[180px] shrink-0 mt-1 sm:mt-0">
                           {isEliminated ? (
                             <Badge variant="outline" className="w-full justify-center h-10 border-red-500/30 text-red-500 bg-red-500/10 font-bold text-sm uppercase">Eliminado</Badge>
                           ) : (
@@ -1543,11 +1538,18 @@ export default function MarketDetailClient({ marketId }: MarketDetailClientProps
         </div>
         
         <div className="w-full max-w-2xl mx-auto lg:max-w-none lg:mx-0 mt-8">
-          {ReglasBlock}
-        </div>
+          {market.description && (
+            <div className="p-5 sm:p-6 rounded-2xl bg-muted/10 border border-border/50 text-foreground leading-relaxed mb-8 shadow-sm">
+              <h3 className="text-base font-bold mb-2 text-foreground">Acerca de este mercado</h3>
+              <p className="text-sm font-medium text-muted-foreground">{market.description}</p>
+            </div>
+          )}
 
-        <div className="block lg:hidden w-full mt-6">
-          {TopHoldersBlock}
+          <div className="block lg:hidden w-full mb-8">
+            {TopHoldersBlock}
+          </div>
+
+          {ReglasBlock}
         </div>
 
       </main>
