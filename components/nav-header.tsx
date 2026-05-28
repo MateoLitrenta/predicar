@@ -83,6 +83,7 @@ export function NavHeader({
   const [bonusClaimed, setBonusClaimed] = useState(false);
   const [isClaimingBonus, setIsClaimingBonus] = useState(false);
   const [bonusError, setBonusError] = useState<string | null>(null);
+  const [canClaimBonus, setCanClaimBonus] = useState(false);
 
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -102,6 +103,21 @@ export function NavHeader({
       if (data && !error) {
         setNotifications(data as AppNotification[]);
         setUnreadCount(data.filter((n) => !n.is_read).length);
+      }
+
+      const { data: profile } = await supabase.from('profiles').select('last_bonus_claim').eq('id', userId).single();
+      if (profile) {
+        if (!profile.last_bonus_claim) {
+          setCanClaimBonus(true);
+        } else {
+          const last = new Date(profile.last_bonus_claim as string);
+          const now = new Date();
+          const diffMs = now.getTime() - last.getTime();
+          const isDifferentCalendarDay = now.toDateString() !== last.toDateString();
+          if (isDifferentCalendarDay || diffMs >= 24 * 60 * 60 * 1000) {
+            setCanClaimBonus(true);
+          }
+        }
       }
     };
 
@@ -140,6 +156,7 @@ export function NavHeader({
         return;
       }
       setBonusClaimed(true);
+      setCanClaimBonus(false);
       if (typeof newPoints === "number") onPointsUpdate(newPoints);
       toast({ title: "¡Ganaste 2000 puntos!", description: "Tu bonus diario fue acreditado." });
       router.refresh();
@@ -291,7 +308,7 @@ export function NavHeader({
 
             <Button onClick={userId ? handleClaimBonus : onOpenAuthModal} disabled={isClaimingBonus} variant="outline" className={cn("relative overflow-hidden border-primary/30 hover:border-primary hover:bg-primary/10 transition-all duration-300", bonusClaimed && "bg-green-500/20 border-green-500/50", bonusError && "bg-red-500/20 border-red-500/50")}>
               {isClaimingBonus ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /><span>Reclamando...</span></> : bonusClaimed ? <><Sparkles className="w-4 h-4 mr-2 text-green-500" /><span className="text-green-600 dark:text-green-400">+2000 pts</span></> : bonusError ? <span className="text-red-600 dark:text-red-400 text-xs">Ya reclamaste hoy</span> : <><Gift className="w-4 h-4 mr-2 text-primary" /><span>Bonus Diario</span></>}
-              {!bonusClaimed && !bonusError && !isClaimingBonus && <Badge className="ml-2 h-5 px-1.5 text-[10px] bg-primary text-primary-foreground">NUEVO</Badge>}
+              {canClaimBonus && !bonusClaimed && !bonusError && !isClaimingBonus && <Badge className="ml-2 h-5 px-1.5 text-[10px] bg-primary text-primary-foreground !rounded-full">NUEVO</Badge>}
             </Button>
 
             {userId && (
@@ -320,7 +337,7 @@ export function NavHeader({
             {userId ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="flex items-center gap-2 px-3 rounded-full bg-muted hover:bg-muted/80 border border-border/50 shadow-sm">
+                  <Button variant="ghost" className="flex items-center gap-2 px-3 !rounded-full bg-muted hover:bg-muted/80 border border-border/50 shadow-sm">
                     <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center">
                       <User className="w-4 h-4 text-primary" />
                     </div>
@@ -347,7 +364,7 @@ export function NavHeader({
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : (
-              <Button onClick={onOpenAuthModal} variant="default" className="rounded-full shadow-md font-bold px-6 hover:scale-[1.02] transition-transform"><User className="w-4 h-4 mr-2" />Ingresar</Button>
+              <Button onClick={onOpenAuthModal} variant="default" className="!rounded-full shadow-md font-bold px-6 hover:scale-[1.02] transition-transform"><User className="w-4 h-4 mr-2" />Ingresar</Button>
             )}
           </div>
 
@@ -397,8 +414,8 @@ export function NavHeader({
             <div className="p-4 space-y-4">
 
               {userId ? (
-                <div className="flex items-center gap-4 p-4 rounded-2xl bg-muted/30 border border-border/50">
-                  <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30 shrink-0">
+                <div className="flex items-center gap-4 p-4 !rounded-full bg-muted/30 border border-border/50">
+                  <div className="w-12 h-12 !rounded-full bg-primary/20 flex items-center justify-center border border-primary/30 shrink-0">
                     <User className="w-6 h-6 text-primary" />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -407,7 +424,7 @@ export function NavHeader({
                   </div>
                 </div>
               ) : (
-                <Button onClick={() => { setShowMobileMenu(false); onOpenAuthModal(); }} className="w-full h-12 text-base font-bold rounded-xl shadow-md">
+                <Button onClick={() => { setShowMobileMenu(false); onOpenAuthModal(); }} className="w-full h-12 text-base font-bold !rounded-full shadow-md">
                   <User className="w-5 h-5 mr-2" /> Ingresar / Registrarse
                 </Button>
               )}
