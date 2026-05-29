@@ -35,7 +35,8 @@ import {
   Trophy,
   Trash2,
   TrendingUp,
-  Users
+  Users,
+  HelpCircle
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
@@ -306,7 +307,7 @@ export function NavHeader({
               </Link>
             </Button>
 
-            <Button onClick={userId ? handleClaimBonus : onOpenAuthModal} disabled={isClaimingBonus} variant="outline" className={cn("relative overflow-hidden rounded-xl border-primary/30 hover:border-primary hover:bg-primary/10 transition-all duration-300", bonusClaimed && "bg-green-500/20 border-green-500/50", bonusError && "bg-red-500/20 border-red-500/50")}>
+            <Button id="tour-bonus-btn" onClick={userId ? handleClaimBonus : onOpenAuthModal} disabled={isClaimingBonus} variant="outline" className={cn("relative overflow-hidden rounded-xl border-primary/30 hover:border-primary hover:bg-primary/10 transition-all duration-300", bonusClaimed && "bg-green-500/20 border-green-500/50", bonusError && "bg-red-500/20 border-red-500/50")}>
               {isClaimingBonus ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /><span>Reclamando...</span></> : bonusClaimed ? <><Sparkles className="w-4 h-4 mr-2 text-green-500" /><span className="text-green-600 dark:text-green-400">+2000 pts</span></> : bonusError ? <span className="text-red-600 dark:text-red-400 text-xs">Ya reclamaste hoy</span> : <><Gift className="w-4 h-4 mr-2 text-primary" /><span>Bonus Diario</span></>}
               {canClaimBonus && !bonusClaimed && !bonusError && !isClaimingBonus && <Badge className="ml-2 h-5 px-1.5 text-[10px] bg-primary text-primary-foreground rounded-xl">NUEVO</Badge>}
             </Button>
@@ -329,6 +330,10 @@ export function NavHeader({
                 </PopoverContent>
               </Popover>
             )}
+
+            <Button variant="ghost" size="icon" onClick={() => window.dispatchEvent(new Event('start-onboarding-tour'))} className="hover:bg-primary/10">
+              <HelpCircle className="w-5 h-5" />
+            </Button>
 
             <Button variant="ghost" size="icon" onClick={onToggleDarkMode} className="hover:bg-primary/10">
               {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}

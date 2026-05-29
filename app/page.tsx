@@ -6,6 +6,7 @@ import { CategoryFilter } from "@/components/category-filter";
 import { MarketCard } from "@/components/market-card";
 import { CreateMarketModal } from "@/components/create-market-modal";
 import { AuthModal } from "@/components/auth-modal";
+import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Search, Flame, Clock, TrendingUp, Loader2, Timer } from "lucide-react";
@@ -13,6 +14,8 @@ import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
 import { useTheme } from "@/components/theme-provider";
+
+const ProductTour = dynamic(() => import("@/components/product-tour").then(mod => mod.ProductTour), { ssr: false });
 
 interface MarketOption {
   id: string;
@@ -212,6 +215,7 @@ export default function PredictionMarketDashboard() {
 
   return (
     <div className="min-h-screen bg-background">
+      <ProductTour />
       <NavHeader points={userPoints} isDarkMode={isDarkMode} onToggleDarkMode={toggleDarkMode} onPointsUpdate={handlePointsUpdate} userId={user?.id ?? null} userEmail={user?.email ?? null} onOpenAuthModal={() => setIsAuthModalOpen(true)} onSignOut={handleSignOut} isAdmin={userRole === "admin"} username={username} />
 
       <main className="container mx-auto px-4 py-4 md:py-6 max-w-[1400px]">
@@ -248,7 +252,7 @@ export default function PredictionMarketDashboard() {
             </div>
           </div>
 
-          <Button size="sm" onClick={() => user ? setIsCreateModalOpen(true) : setIsAuthModalOpen(true)} className="hidden lg:flex shrink-0 h-9 px-4 rounded-xl font-bold shadow-sm transition-all">
+          <Button id="tour-create-btn-desktop" size="sm" onClick={() => user ? setIsCreateModalOpen(true) : setIsAuthModalOpen(true)} className="hidden lg:flex shrink-0 h-9 px-4 rounded-xl font-bold shadow-sm transition-all">
             <Plus className="w-4 h-4 mr-1.5" /> Crear
           </Button>
         </div>
@@ -258,7 +262,7 @@ export default function PredictionMarketDashboard() {
         </div>
 
         {isLoadingMarkets ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4 md:gap-5">
+          <div id="tour-markets-grid" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4 md:gap-5">
             {[...Array(8)].map((_, i) => (
               <div key={i} className="flex flex-col rounded-2xl border border-border/40 bg-card p-4 sm:p-5 h-[260px] animate-in fade-in duration-500" style={{ animationDelay: `${i * 50}ms` }}>
                 <div className="flex gap-3 items-start">
@@ -282,7 +286,7 @@ export default function PredictionMarketDashboard() {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4 md:gap-5">
+            <div id="tour-markets-grid" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4 md:gap-5">
               {sortedMarkets.map((market) => (
                 <MarketCard
                   key={market.id}
@@ -319,7 +323,7 @@ export default function PredictionMarketDashboard() {
         )}
       </main>
 
-      <Button onClick={() => user ? setIsCreateModalOpen(true) : setIsAuthModalOpen(true)} className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 transition-all hover:scale-105 md:hidden z-40" size="icon">
+      <Button id="tour-create-btn-mobile" onClick={() => user ? setIsCreateModalOpen(true) : setIsAuthModalOpen(true)} className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 transition-all hover:scale-105 md:hidden z-40" size="icon">
         <Plus className="w-6 h-6" />
       </Button>
 
