@@ -248,7 +248,7 @@ export default function PredictionMarketDashboard() {
             </div>
           </div>
 
-          <Button size="sm" onClick={() => user ? setIsCreateModalOpen(true) : setIsAuthModalOpen(true)} className="hidden lg:flex shrink-0 h-9 px-4 rounded-lg font-bold shadow-sm transition-all">
+          <Button size="sm" onClick={() => user ? setIsCreateModalOpen(true) : setIsAuthModalOpen(true)} className="hidden lg:flex shrink-0 h-9 px-4 rounded-xl font-bold shadow-sm transition-all">
             <Plus className="w-4 h-4 mr-1.5" /> Crear
           </Button>
         </div>
